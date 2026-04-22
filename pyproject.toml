@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qrspi-agent"
+version = "1.0.0"
+description = "QRSPI Agent - 结构化编程 Agent 工作流框架"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "QRSPI Team"}
+]
+keywords = ["ai", "agent", "workflow", "programming", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Tools",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.scripts]
+qrspi = "qrspi.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "black>=22.0", "mypy>=0.950"]
