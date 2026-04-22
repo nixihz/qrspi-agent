@@ -15,18 +15,6 @@ from typing import List
 from qrspi.workflow import QRSPIWorkflow, Stage
 
 
-STAGE_DEPENDENCIES = {
-    Stage.QUESTIONS: [],
-    Stage.RESEARCH: [Stage.QUESTIONS],
-    Stage.DESIGN: [Stage.QUESTIONS, Stage.RESEARCH],
-    Stage.STRUCTURE: [Stage.DESIGN],
-    Stage.PLAN: [Stage.STRUCTURE],
-    Stage.WORK_TREE: [Stage.PLAN],
-    Stage.IMPLEMENT: [Stage.WORK_TREE, Stage.PLAN, Stage.STRUCTURE],
-    Stage.PULL_REQUEST: [Stage.IMPLEMENT, Stage.WORK_TREE, Stage.DESIGN],
-}
-
-
 @dataclass
 class ContextEntry:
     stage: str
@@ -54,7 +42,7 @@ class ContextBuilder:
         self.max_chars_per_artifact = max_chars_per_artifact
 
     def build(self, stage: Stage) -> ContextPack:
-        deps = STAGE_DEPENDENCIES.get(stage, [])
+        deps = Stage.get_dependencies(stage)
         entries: List[ContextEntry] = []
         blocks: List[str] = []
 

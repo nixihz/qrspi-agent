@@ -54,6 +54,14 @@ Work Tree → I → PR
 
 ## 快速开始
 
+## 内置 Skill
+
+仓库现在附带一个本地 skill：
+
+- `skills/qrspi-cli-workflow`
+
+它是一个工具型 skill，用于指导 agent 优先调用当前项目的 `qrspi` CLI，而不是手工模拟工作流。适合初始化 feature、查看状态、渲染阶段 prompt、推进阶段、审批 gate、管理切片以及驱动 `run` 自动执行。
+
 ### 安装
 
 ```bash
@@ -87,7 +95,7 @@ qrspi init user-authentication --root .
 # 查看 Q 阶段的指令和验证标准
 qrspi prompt Q
 
-# 渲染完整 prompt（可以直接给 Claude Code 使用）
+# 渲染完整 prompt（可以直接给 Claude Code / Codex CLI 使用）
 qrspi prompt Q --render --input "添加用户认证功能，支持邮箱+密码和 OAuth"
 ```
 
@@ -101,18 +109,26 @@ qrspi advance
 
 ### 3b. 自动执行直到人工 Gate
 
-如果你已经配置好 Claude Code，也可以让工作流自动推进：
+如果你已经配置好 Claude Code 或 Codex CLI，也可以让工作流自动推进：
 
 ```bash
 # 使用真实 Claude Code，从当前阶段开始执行
 # 默认模型: kimi-for-coding
 qrspi run --input "添加用户认证功能，支持邮箱+密码和 OAuth"
 
+# 使用 Codex CLI，从当前阶段开始执行
+# 默认模型: gpt-5.4
+qrspi run --runner codex --input "添加用户认证功能，支持邮箱+密码和 OAuth"
+
 # 如果担心 Claude 长时间无响应，可以设置超时（秒）
 qrspi run --input "添加用户认证功能" --timeout 180
 
 # 也可以显式指定模型
 qrspi run --input "添加用户认证功能" --model kimi-for-coding
+
+# Codex CLI 也支持显式模型和配置覆盖
+qrspi run --runner codex --model gpt-5.4 --codex-config reasoning_effort=\"high\"
+qrspi run --runner codex --codex-profile work
 
 # 本地验证状态机时可使用 mock runner
 qrspi run --runner mock --input "添加用户认证功能"
@@ -171,6 +187,33 @@ qrspi budget
 - 阶段结果自动经过 validator 校验
 - `D`、`S`、`PR` 阶段自动暂停等待人工确认
 - `qrspi approve`：人工确认后推进到下一阶段
+
+### Runner 与模型配置
+
+当前支持三种 runner：
+
+- `claude`
+- `codex`
+- `mock`
+
+模型选择支持三层优先级：
+
+1. 命令行参数 `--model`
+2. 环境变量 `QRSPI_<RUNNER>_MODEL` 或 `QRSPI_MODEL`
+3. runner 默认值
+
+默认模型：
+
+- `claude` -> `kimi-for-coding`
+- `codex` -> `gpt-5.4`
+
+示例：
+
+```bash
+export QRSPI_RUNNER=codex
+export QRSPI_CODEX_MODEL=gpt-5.4-mini
+qrspi status
+```
 
 ### 2. 垂直切片（优于水平分层）
 

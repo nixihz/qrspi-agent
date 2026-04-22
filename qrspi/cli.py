@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 
 from qrspi.engine import WorkflowEngine
+from qrspi.runner import supported_runner_names
 from qrspi.workflow import QRSPIWorkflow, Stage, SessionConfig, VerticalSlice
 from qrspi.prompts import registry
 
@@ -140,15 +141,12 @@ def cmd_status(args):
     workflow = QRSPIWorkflow(config)
     workflow.print_workflow_status()
 
-    engine = WorkflowEngine.with_runner_name(
-        config,
-        getattr(args, "runner", "claude"),
-        timeout_seconds=getattr(args, "timeout", 180),
-        model=getattr(args, "model", "kimi-for-coding"),
-    )
+    engine = _build_engine(args, config)
     engine_status = engine.get_status()
     print(f"\n引擎状态: {engine_status['status']}")
     print(f"Runner: {engine_status['runner']}")
+    if engine_status["model"]:
+        print(f"Model: {engine_status['model']}")
     if engine_status["last_error"]:
         print(f"最近错误: {engine_status['last_error']}")
 
@@ -243,19 +241,7 @@ def cmd_context(args):
     print(f"\n📋 阶段 {stage.full_name} 的 Context 策略")
     print("=" * 50)
 
-    # 显示前置依赖
-    stage_deps = {
-        Stage.QUESTIONS: [],
-        Stage.RESEARCH: [Stage.QUESTIONS],
-        Stage.DESIGN: [Stage.QUESTIONS, Stage.RESEARCH],
-        Stage.STRUCTURE: [Stage.QUESTIONS, Stage.RESEARCH, Stage.DESIGN],
-        Stage.PLAN: [Stage.QUESTIONS, Stage.RESEARCH, Stage.DESIGN, Stage.STRUCTURE],
-        Stage.WORK_TREE: [Stage.QUESTIONS, Stage.RESEARCH, Stage.DESIGN, Stage.STRUCTURE, Stage.PLAN],
-        Stage.IMPLEMENT: [Stage.STRUCTURE, Stage.PLAN],
-        Stage.PULL_REQUEST: [],
-    }
-
-    deps = stage_deps.get(stage, [])
+    deps = Stage.get_dependencies(stage)
     if deps:
         print(f"\n📎 前置产物 (应加载到 Context):")
         for dep in deps:
@@ -278,18 +264,19 @@ def cmd_context(args):
     print(f"\n💡 获取 prompt: qrspi prompt {stage.value} --render")
 
 
+def cmd_version(args):
+    """查看版本信息"""
+    from qrspi import __version__
+    print(f"QRSPI Agent {__version__}")
+
+
 def cmd_run(args):
     """自动执行工作流，直到遇到 gate 或结束"""
     config = _load_config(args)
     if not config:
         return
 
-    engine = WorkflowEngine.with_runner_name(
-        config,
-        args.runner,
-        timeout_seconds=args.timeout,
-        model=args.model,
-    )
+    engine = _build_engine(args, config)
     messages = engine.run(
         user_input=args.input or "",
         until_gate=not args.no_stop_at_gate,
@@ -313,12 +300,7 @@ def cmd_approve(args):
     if not config:
         return
 
-    engine = WorkflowEngine.with_runner_name(
-        config,
-        args.runner,
-        timeout_seconds=args.timeout,
-        model=args.model,
-    )
+    engine = _build_engine(args, config)
     message = engine.approve(args.stage)
     print(f"\n✅ {message}")
 
@@ -334,6 +316,21 @@ def _load_config(args):
         print(f"❌ 未找到 QRSPI 工作流目录: {qrspi_dir}")
         print(f"   请先运行: qrspi init <feature_id> --root {root}")
         return None
+
+    # 显式指定 feature_id 时直接使用
+    explicit_feature = getattr(args, 'feature_id', None)
+    if explicit_feature:
+        feature_dir = qrspi_dir / explicit_feature
+        if not feature_dir.exists():
+            available = [d.name for d in qrspi_dir.iterdir() if d.is_dir()]
+            print(f"❌ 未找到 feature '{explicit_feature}'")
+            print(f"   可用 feature: {', '.join(available) if available else '无'}")
+            return None
+        return SessionConfig(
+            feature_id=explicit_feature,
+            project_root=root,
+            output_dir=output_dir
+        )
 
     # 找到最新的 feature
     features = [d for d in qrspi_dir.iterdir() if d.is_dir()]
@@ -352,6 +349,36 @@ def _load_config(args):
     )
 
 
+def _build_engine(args, config):
+    return WorkflowEngine.with_runner_name(
+        config,
+        getattr(args, "runner", None),
+        timeout_seconds=getattr(args, "timeout", 180),
+        model=getattr(args, "model", None),
+        codex_profile=getattr(args, "codex_profile", None),
+        codex_config_overrides=getattr(args, "codex_config", None),
+    )
+
+
+def _add_runner_args(parser):
+    parser.add_argument(
+        "--runner",
+        choices=supported_runner_names(),
+        help="运行器类型；未传时按 QRSPI_RUNNER 或默认值解析",
+    )
+    parser.add_argument("--timeout", type=int, default=180, help="Runner 超时秒数")
+    parser.add_argument("--model", help="模型名；未传时按 runner 默认值或环境变量解析")
+    parser.add_argument(
+        "--codex-profile",
+        help="Codex CLI profile 名称，仅在 --runner codex 时生效",
+    )
+    parser.add_argument(
+        "--codex-config",
+        action="append",
+        help="Codex CLI 配置覆盖，格式 key=value，可重复传入，仅在 --runner codex 时生效",
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="QRSPI Agent - 结构化编程 Agent 工作流",
@@ -362,6 +389,7 @@ Examples:
   qrspi prompt Q --render
   qrspi advance
   qrspi status
+  qrspi run --runner codex --model gpt-5.4
   qrspi budget
         """
     )
@@ -393,9 +421,7 @@ Examples:
     # status
     status_parser = subparsers.add_parser("status", help="查看完整状态")
     status_parser.add_argument("--root", help="项目根目录")
-    status_parser.add_argument("--runner", default="claude", choices=["claude", "mock"], help="运行器类型")
-    status_parser.add_argument("--timeout", type=int, default=180, help="Claude runner 超时秒数")
-    status_parser.add_argument("--model", default="kimi-for-coding", help="Claude runner 使用的模型名")
+    _add_runner_args(status_parser)
 
     # slice
     slice_parser = subparsers.add_parser("slice", help="管理工作树切片")
@@ -414,13 +440,14 @@ Examples:
     context_parser = subparsers.add_parser("context", help="查看 Context 策略")
     context_parser.add_argument("--root", help="项目根目录")
 
+    # version
+    version_parser = subparsers.add_parser("version", help="查看版本信息")
+
     # run
     run_parser = subparsers.add_parser("run", help="自动执行工作流直到 gate 或完成")
     run_parser.add_argument("--root", help="项目根目录")
     run_parser.add_argument("--input", help="Q 阶段的初始需求输入")
-    run_parser.add_argument("--runner", default="claude", choices=["claude", "mock"], help="运行器类型")
-    run_parser.add_argument("--timeout", type=int, default=180, help="Claude runner 超时秒数")
-    run_parser.add_argument("--model", default="kimi-for-coding", help="Claude runner 使用的模型名")
+    _add_runner_args(run_parser)
     run_parser.add_argument("--max-stages", type=int, help="本次最多执行多少阶段")
     run_parser.add_argument("--no-stop-at-gate", action="store_true", help="即使遇到 gate 也不中止（不推荐）")
 
@@ -428,9 +455,7 @@ Examples:
     approve_parser = subparsers.add_parser("approve", help="确认当前 gate 阶段并推进")
     approve_parser.add_argument("stage", nargs="?", help="可选，显式指定要确认的阶段代码")
     approve_parser.add_argument("--root", help="项目根目录")
-    approve_parser.add_argument("--runner", default="claude", choices=["claude", "mock"], help="运行器类型")
-    approve_parser.add_argument("--timeout", type=int, default=180, help="Claude runner 超时秒数")
-    approve_parser.add_argument("--model", default="kimi-for-coding", help="Claude runner 使用的模型名")
+    _add_runner_args(approve_parser)
 
     args = parser.parse_args()
 
@@ -449,6 +474,7 @@ Examples:
         "context": cmd_context,
         "run": cmd_run,
         "approve": cmd_approve,
+        "version": cmd_version,
     }
 
     commands[args.command](args)

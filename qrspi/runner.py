@@ -1,14 +1,16 @@
 """
-Claude Code 运行器
+CLI 运行器
 
 MVP 支持：
 - claude: 真实调用本机 claude CLI
+- codex: 真实调用本机 codex CLI
 - mock: 生成占位输出，便于本地验证状态机
 """
 
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -16,6 +18,33 @@ from pathlib import Path
 from typing import List, Optional
 
 from qrspi.workflow import Stage
+
+
+DEFAULT_RUNNER_NAME = "claude"
+DEFAULT_MODELS = {
+    "claude": "kimi-for-coding",
+    "codex": "gpt-5.4",
+}
+
+
+def supported_runner_names() -> List[str]:
+    return ["claude", "codex", "mock"]
+
+
+def resolve_runner_name(runner_name: Optional[str] = None) -> str:
+    return runner_name or os.getenv("QRSPI_RUNNER") or DEFAULT_RUNNER_NAME
+
+
+def resolve_runner_model(runner_name: str, model: Optional[str] = None) -> str:
+    if model:
+        return model
+
+    runner_key = runner_name.upper()
+    return (
+        os.getenv(f"QRSPI_{runner_key}_MODEL")
+        or os.getenv("QRSPI_MODEL")
+        or DEFAULT_MODELS.get(runner_name, "")
+    )
 
 
 @dataclass
@@ -34,19 +63,57 @@ class BaseRunner:
     def run(self, stage: Stage, prompt: str, project_root: Path, run_dir: Path) -> RunnerResult:
         raise NotImplementedError
 
+    @staticmethod
+    def _run_subprocess(
+        command: List[str],
+        cwd: Path,
+        input_text: str,
+        timeout_seconds: int,
+        tool_name: str,
+    ) -> RunnerResult:
+        """统一封装 subprocess 调用，处理超时和结果封装"""
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(cwd),
+                input=input_text,
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+            )
+        except subprocess.TimeoutExpired as exc:
+            return RunnerResult(
+                ok=False,
+                command=command,
+                stdout=exc.stdout or "",
+                stderr=(exc.stderr or "")
+                + f"\n{tool_name} command timed out after {timeout_seconds}s",
+                exit_code=124,
+                timed_out=True,
+            )
+
+        return RunnerResult(
+            ok=completed.returncode == 0,
+            command=command,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+            exit_code=completed.returncode,
+            timed_out=False,
+        )
+
 
 class ClaudeCodeRunner(BaseRunner):
     name = "claude"
 
     def __init__(
         self,
-        model: str = "kimi-for-coding",
+        model: Optional[str] = None,
         effort: str = "medium",
         permission_mode: str = "bypassPermissions",
         timeout_seconds: int = 180,
         additional_args: Optional[List[str]] = None,
     ):
-        self.model = model
+        self.model = resolve_runner_model(self.name, model)
         self.effort = effort
         self.permission_mode = permission_mode
         self.timeout_seconds = timeout_seconds
@@ -74,42 +141,85 @@ class ClaudeCodeRunner(BaseRunner):
         ]
         command.extend(self.additional_args)
 
-        try:
-            completed = subprocess.run(
-                command,
-                cwd=str(project_root),
-                input=prompt,
-                capture_output=True,
-                text=True,
-                timeout=self.timeout_seconds,
-            )
-        except subprocess.TimeoutExpired as exc:
-            return RunnerResult(
-                ok=False,
-                command=command,
-                stdout=exc.stdout or "",
-                stderr=(exc.stderr or "")
-                + f"\nClaude command timed out after {self.timeout_seconds}s",
-                exit_code=124,
-                timed_out=True,
-            )
-
-        return RunnerResult(
-            ok=completed.returncode == 0,
+        return self._run_subprocess(
             command=command,
-            stdout=completed.stdout,
-            stderr=completed.stderr,
-            exit_code=completed.returncode,
-            timed_out=False,
+            cwd=project_root,
+            input_text=prompt,
+            timeout_seconds=self.timeout_seconds,
+            tool_name="Claude",
         )
+
+
+class CodexCliRunner(BaseRunner):
+    name = "codex"
+
+    def __init__(
+        self,
+        model: Optional[str] = None,
+        timeout_seconds: int = 180,
+        profile: Optional[str] = None,
+        config_overrides: Optional[List[str]] = None,
+        additional_args: Optional[List[str]] = None,
+    ):
+        self.model = resolve_runner_model(self.name, model)
+        self.timeout_seconds = timeout_seconds
+        self.profile = profile
+        self.config_overrides = config_overrides or []
+        self.additional_args = additional_args or []
+
+    def run(self, stage: Stage, prompt: str, project_root: Path, run_dir: Path) -> RunnerResult:
+        codex_bin = shutil.which("codex")
+        if not codex_bin:
+            return RunnerResult(False, [], "", "codex command not found", 127)
+
+        output_file = run_dir / "codex_last_message.txt"
+        command = [
+            codex_bin,
+            "exec",
+            "--full-auto",
+            "--cd",
+            str(project_root),
+            "--output-last-message",
+            str(output_file),
+            "--color",
+            "never",
+        ]
+        if self.model:
+            command.extend(["--model", self.model])
+        if self.profile:
+            command.extend(["--profile", self.profile])
+        for override in self.config_overrides:
+            command.extend(["-c", override])
+        command.extend(self.additional_args)
+
+        result = self._run_subprocess(
+            command=command,
+            cwd=project_root,
+            input_text=prompt,
+            timeout_seconds=self.timeout_seconds,
+            tool_name="Codex",
+        )
+
+        if not result.timed_out and output_file.exists():
+            saved_output = output_file.read_text(encoding="utf-8").strip()
+            if saved_output:
+                return RunnerResult(
+                    ok=result.ok,
+                    command=result.command,
+                    stdout=saved_output,
+                    stderr=result.stderr,
+                    exit_code=result.exit_code,
+                    timed_out=result.timed_out,
+                )
+
+        return result
 
 
 class MockRunner(BaseRunner):
     name = "mock"
 
-    def run(self, stage: Stage, prompt: str, project_root: Path, run_dir: Path) -> RunnerResult:
-        outputs = {
-            Stage.QUESTIONS: """# 技术问题清单
+    _OUTPUTS = {
+        Stage.QUESTIONS: """# 技术问题清单
 
 ## Feature 概述
 示例功能
@@ -147,7 +257,7 @@ class MockRunner(BaseRunner):
 ## 风险标记
 - 需求与现有结构可能不匹配
 """,
-            Stage.RESEARCH: """# 技术地图
+        Stage.RESEARCH: """# 技术地图
 
 ## Q1: 当前入口在哪？
 ### 发现
@@ -162,7 +272,7 @@ class MockRunner(BaseRunner):
 ## 未解决问题
 - 暂无
 """,
-            Stage.DESIGN: """# 设计讨论文档
+        Stage.DESIGN: """# 设计讨论文档
 
 ## 1. 当前状态
 当前通过手动命令推进。
@@ -185,7 +295,7 @@ class MockRunner(BaseRunner):
 ## 5. 风险与缓解
 - 校验过严会阻塞推进
 """,
-            Stage.STRUCTURE: """# 结构大纲
+        Stage.STRUCTURE: """# 结构大纲
 
 ## 类型定义
 ```python
@@ -214,7 +324,7 @@ def approve(stage: str) -> None
 - **函数**: validate_stage_output
 - **测试**: 各阶段规则
 """,
-            Stage.PLAN: """# 实施计划
+        Stage.PLAN: """# 实施计划
 
 ## 切片 1: 状态机
 ### 修改清单
@@ -234,30 +344,30 @@ def approve(stage: str) -> None
 ## 时间表估算
 - 1 小时
 """,
-            Stage.WORK_TREE: json.dumps(
-                {
-                    "slices": [
-                        {
-                            "name": "engine-core",
-                            "description": "状态机和 runner",
-                            "order": 1,
-                            "tasks": [
-                                {
-                                    "id": "engine-state",
-                                    "description": "实现状态持久化",
-                                    "estimated_minutes": 20,
-                                    "context_budget": "low",
-                                    "dependencies": [],
-                                }
-                            ],
-                            "checkpoint": "状态可恢复",
-                        }
-                    ]
-                },
-                ensure_ascii=False,
-                indent=2,
-            ),
-            Stage.IMPLEMENT: """# 实现报告: engine-core
+        Stage.WORK_TREE: json.dumps(
+            {
+                "slices": [
+                    {
+                        "name": "engine-core",
+                        "description": "状态机和 runner",
+                        "order": 1,
+                        "tasks": [
+                            {
+                                "id": "engine-state",
+                                "description": "实现状态持久化",
+                                "estimated_minutes": 20,
+                                "context_budget": "low",
+                                "dependencies": [],
+                            }
+                        ],
+                        "checkpoint": "状态可恢复",
+                    }
+                ]
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        Stage.IMPLEMENT: """# 实现报告: engine-core
 
 ## 完成的修改
 - `qrspi/engine.py`: 新增自动运行和 gate 恢复
@@ -272,7 +382,7 @@ def approve(stage: str) -> None
 ## 下一切片准备
 - 后续接入结构化 JSON 契约
 """,
-            Stage.PULL_REQUEST: """# PR: engine-core
+        Stage.PULL_REQUEST: """# PR: engine-core
 
 ## 变更摘要
 新增自动工作流引擎 MVP。
@@ -296,6 +406,28 @@ def approve(stage: str) -> None
 ## 需要关注的代码
 - gate 恢复逻辑
 """,
-        }
-        stdout = outputs.get(stage, f"# {stage.value}\n\nMock output")
+    }
+
+    def run(self, stage: Stage, prompt: str, project_root: Path, run_dir: Path) -> RunnerResult:
+        stdout = MockRunner._OUTPUTS.get(stage, f"# {stage.value}\n\nMock output")
         return RunnerResult(ok=True, command=["mock"], stdout=stdout, stderr="", exit_code=0)
+
+
+def build_runner(
+    runner_name: Optional[str] = None,
+    timeout_seconds: int = 180,
+    model: Optional[str] = None,
+    codex_profile: Optional[str] = None,
+    codex_config_overrides: Optional[List[str]] = None,
+) -> BaseRunner:
+    resolved_runner = resolve_runner_name(runner_name)
+    if resolved_runner == "mock":
+        return MockRunner()
+    if resolved_runner == "codex":
+        return CodexCliRunner(
+            timeout_seconds=timeout_seconds,
+            model=model,
+            profile=codex_profile,
+            config_overrides=codex_config_overrides,
+        )
+    return ClaudeCodeRunner(timeout_seconds=timeout_seconds, model=model)

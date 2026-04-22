@@ -14,7 +14,7 @@ from typing import Dict, List, Optional
 
 from qrspi.context import ContextBuilder
 from qrspi.prompts import registry
-from qrspi.runner import BaseRunner, ClaudeCodeRunner, MockRunner
+from qrspi.runner import BaseRunner, build_runner
 from qrspi.validators import validate_stage_output
 from qrspi.workflow import QRSPIWorkflow, SessionConfig, Stage
 
@@ -87,7 +87,7 @@ class WorkflowEngine:
     def __init__(self, config: SessionConfig, runner: Optional[BaseRunner] = None):
         self.config = config.ensure_dirs()
         self.workflow = QRSPIWorkflow(config)
-        self.runner = runner or ClaudeCodeRunner()
+        self.runner = runner or build_runner()
         self.context_builder = ContextBuilder(self.workflow)
         self.state_path = self.config.output_path / "engine_state.json"
         self.state = EngineState.load(self.state_path, self.config.feature_id, self.workflow.current_stage)
@@ -96,14 +96,19 @@ class WorkflowEngine:
     def with_runner_name(
         cls,
         config: SessionConfig,
-        runner_name: str,
+        runner_name: Optional[str],
         timeout_seconds: int = 180,
-        model: str = "kimi-for-coding",
+        model: Optional[str] = None,
+        codex_profile: Optional[str] = None,
+        codex_config_overrides: Optional[List[str]] = None,
     ) -> "WorkflowEngine":
-        if runner_name == "mock":
-            runner: BaseRunner = MockRunner()
-        else:
-            runner = ClaudeCodeRunner(timeout_seconds=timeout_seconds, model=model)
+        runner = build_runner(
+            runner_name=runner_name,
+            timeout_seconds=timeout_seconds,
+            model=model,
+            codex_profile=codex_profile,
+            codex_config_overrides=codex_config_overrides,
+        )
         return cls(config, runner=runner)
 
     def run(self, user_input: str = "", until_gate: bool = True, max_stages: Optional[int] = None) -> List[str]:
@@ -163,6 +168,7 @@ class WorkflowEngine:
             "stage_name": self.workflow.current_stage.full_name,
             "status": self.state.status,
             "runner": self.runner.name,
+            "model": getattr(self.runner, "model", ""),
             "last_error": self.state.last_error,
         }
 
@@ -179,6 +185,8 @@ class WorkflowEngine:
         context_pack_path = context_pack.save(run_dir / "context.json")
 
         prompt_template = registry.get(stage.value)
+        if prompt_template is None:
+            raise ValueError(f"阶段 '{stage.value}' 没有对应的 prompt 模板")
         prompt_text = prompt_template.render(
             context=context_pack.focused_context,
             user_input=user_input,

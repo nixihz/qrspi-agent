@@ -1,0 +1,4 @@
+interface:
+  display_name: "QRSPI CLI"
+  short_description: "Operate the qrspi CLI workflow for a project"
+  default_prompt: "Use $qrspi-cli-workflow to inspect the current qrspi workflow state, choose the right qrspi CLI command, and advance the feature safely without bypassing gates or the state machine."

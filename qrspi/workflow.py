@@ -18,13 +18,11 @@ Context 管理原则:
 """
 
 import json
-import os
 from datetime import datetime
-from enum import Enum, auto
+from enum import Enum
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Optional, List, Dict, Any
-import hashlib
 
 
 class Stage(Enum):
@@ -56,6 +54,21 @@ class Stage(Enum):
             return stages[idx + 1] if idx + 1 < len(stages) else None
         except ValueError:
             return None
+
+    @classmethod
+    def get_dependencies(cls, stage: 'Stage') -> List['Stage']:
+        """获取指定阶段的前置依赖阶段（单一数据源）"""
+        _deps: Dict['Stage', List['Stage']] = {
+            cls.QUESTIONS: [],
+            cls.RESEARCH: [cls.QUESTIONS],
+            cls.DESIGN: [cls.QUESTIONS, cls.RESEARCH],
+            cls.STRUCTURE: [cls.QUESTIONS, cls.RESEARCH, cls.DESIGN],
+            cls.PLAN: [cls.QUESTIONS, cls.RESEARCH, cls.DESIGN, cls.STRUCTURE],
+            cls.WORK_TREE: [cls.QUESTIONS, cls.RESEARCH, cls.DESIGN, cls.STRUCTURE, cls.PLAN],
+            cls.IMPLEMENT: [cls.WORK_TREE, cls.PLAN, cls.STRUCTURE],
+            cls.PULL_REQUEST: [cls.IMPLEMENT, cls.WORK_TREE, cls.DESIGN],
+        }
+        return _deps.get(stage, [])
 
     @property
     def full_name(self) -> str:
@@ -193,7 +206,12 @@ class QRSPIWorkflow:
         if self.state_file.exists():
             with open(self.state_file, 'r', encoding='utf-8') as f:
                 state = json.load(f)
-                self.current_stage = Stage(state.get("current_stage", "Q"))
+                raw_stage = state.get("current_stage", "Q")
+                try:
+                    self.current_stage = Stage(raw_stage)
+                except ValueError:
+                    print(f"[QRSPI] 警告: 状态文件中的阶段 '{raw_stage}' 无效，回退到 Q")
+                    self.current_stage = Stage.QUESTIONS
                 feature_id = state.get("feature_id", self.config.feature_id)
                 print(f"[QRSPI] 恢复工作流: {self.current_stage.full_name} (Feature: {feature_id})")
 
@@ -267,21 +285,8 @@ class QRSPIWorkflow:
         """
         context_parts = []
 
-        # 每个阶段所需的前置产物
-        stage_dependencies = {
-            Stage.QUESTIONS: [],
-            Stage.RESEARCH: ["Q"],
-            Stage.DESIGN: ["Q", "R"],
-            Stage.STRUCTURE: ["Q", "R", "D"],
-            Stage.PLAN: ["Q", "R", "D", "S"],
-            Stage.WORK_TREE: ["Q", "R", "D", "S", "P"],
-            Stage.IMPLEMENT: ["S", "P", "W"],
-            Stage.PULL_REQUEST: ["W", "I"]
-        }
-
-        deps = stage_dependencies.get(stage, [])
-        for dep in deps:
-            dep_stage = Stage(dep)
+        deps = Stage.get_dependencies(stage)
+        for dep_stage in deps:
             content = self.load_artifact(dep_stage)
             if content:
                 # 压缩: 只取关键部分，避免 Context 膨胀
