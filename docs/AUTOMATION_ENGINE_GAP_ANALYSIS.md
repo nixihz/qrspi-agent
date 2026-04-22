@@ -1,5 +1,9 @@
 # QRSPI 自动化工作流引擎差距分析
 
+> **状态：已解决** — 本文档中识别的大部分差距已通过 `qrspi/engine.py`、`qrspi/runner.py`、
+> `qrspi/validators.py`、`qrspi/context.py` 及 `qrspi run` / `qrspi approve` CLI 命令实现。
+> 保留此文仅供参考，不再代表当前代码状态。
+
 ## 目标
 
 当前项目已经具备 QRSPI 的阶段模型、Prompt 模板、基础状态持久化和切片概念。

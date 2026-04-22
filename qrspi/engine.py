@@ -61,7 +61,11 @@ class EngineState:
             return cls(feature_id=feature_id, current_stage=current_stage.value)
 
         data = json.loads(path.read_text(encoding="utf-8"))
-        history = [StageRunRecord(**record) for record in data.get("history", [])]
+        valid_fields = set(StageRunRecord.__dataclass_fields__.keys())
+        history = [
+            StageRunRecord(**{k: v for k, v in record.items() if k in valid_fields})
+            for record in data.get("history", [])
+        ]
         return cls(
             feature_id=data.get("feature_id", feature_id),
             current_stage=data.get("current_stage", current_stage.value),

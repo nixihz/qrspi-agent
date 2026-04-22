@@ -91,6 +91,9 @@ def cmd_prompt(args):
             stage = Stage(stage_code)
             context = workflow.get_context_for_stage(stage)
             user_input = args.input or ""
+        else:
+            print("⚠️  未检测到 QRSPI 工作流，render 结果不含前置上下文")
+            print(f"   如需加载上下文，请先运行: qrspi init <feature_id> --root .\n")
 
         full_prompt = prompt.render(context=context, user_input=user_input)
         print(full_prompt)
