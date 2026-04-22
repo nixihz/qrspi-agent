@@ -173,6 +173,7 @@ class WorkTree:
         return self.current_slice
 
     def save(self, path: Path):
+        path.mkdir(parents=True, exist_ok=True)
         filepath = path / "work_tree.json"
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump({
@@ -216,15 +217,18 @@ class QRSPIWorkflow:
                 print(f"[QRSPI] 恢复工作流: {self.current_stage.full_name} (Feature: {feature_id})")
 
     def save_state(self):
-        """保存状态到磁盘"""
+        """保存状态到磁盘（原子写入，防止并发损坏）"""
         state = {
             "current_stage": self.current_stage.value,
             "feature_id": self.config.feature_id,
             "timestamp": datetime.now().isoformat(),
             "stage_name": self.current_stage.full_name
         }
-        with open(self.state_file, 'w', encoding='utf-8') as f:
+        tmp_file = self.state_file.with_suffix('.tmp')
+        self.state_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(tmp_file, 'w', encoding='utf-8') as f:
             json.dump(state, f, indent=2, ensure_ascii=False)
+        tmp_file.replace(self.state_file)
 
     def transition_to(self, stage: Stage) -> bool:
         """转换到下一阶段"""

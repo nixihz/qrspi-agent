@@ -66,8 +66,52 @@ class ContextBuilder:
         return ContextPack(stage=stage.value, entries=entries, focused_context=focused)
 
     def _summarize(self, content: str) -> str:
-        lines = [line.rstrip() for line in content.splitlines() if line.strip()]
-        cleaned = "\n".join(lines[:40])
+        """语义化摘要：保留标题结构，折叠代码块，截断长段落。"""
+        lines = content.splitlines()
+        result: list[str] = []
+        in_code_block = False
+        code_block_placeholder = False
+        total_chars = 0
+
+        for line in lines:
+            stripped = line.rstrip()
+            if not stripped:
+                continue
+
+            # 代码块边界
+            if stripped.startswith("```"):
+                in_code_block = not in_code_block
+                if in_code_block and not code_block_placeholder:
+                    result.append("```...")
+                    code_block_placeholder = True
+                elif not in_code_block:
+                    code_block_placeholder = False
+                continue
+
+            if in_code_block:
+                continue  # 跳过代码块内容
+
+            # 保留标题行（H1-H3）
+            if stripped.startswith(("# ", "## ", "### ")):
+                result.append(stripped)
+                total_chars += len(stripped)
+                continue
+
+            # 保留列表项（最多前 8 条）
+            if stripped.startswith(("- ", "* ", "1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. ")):
+                list_prefix = [r for r in result if r.startswith(("- ", "* ", "1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "))]
+                if len(list_prefix) < 8:
+                    result.append(stripped)
+                    total_chars += len(stripped)
+                continue
+
+            # 普通段落：只取前 3 个非标题/列表行
+            normal_lines = [r for r in result if not r.startswith(("#", "- ", "* ", "1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. ", "```"))]
+            if len(normal_lines) < 3:
+                result.append(stripped)
+                total_chars += len(stripped)
+
+        cleaned = "\n".join(result)
         if len(cleaned) > self.max_chars_per_artifact:
             return cleaned[: self.max_chars_per_artifact].rstrip() + "\n...[truncated]"
         return cleaned

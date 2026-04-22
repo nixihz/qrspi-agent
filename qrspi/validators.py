@@ -52,7 +52,12 @@ def validate_stage_output(stage: Stage, content: str) -> ValidationResult:
         Stage.IMPLEMENT: _validate_i,
         Stage.PULL_REQUEST: _validate_pr,
     }
-    return handlers[stage](content)
+    handler = handlers.get(stage)
+    if handler is None:
+        result = ValidationResult(stage=stage.value, passed=False)
+        result.errors.append(f"未知的阶段: {stage.value}")
+        return result
+    return handler(content)
 
 
 def _base(stage: Stage, content: str) -> ValidationResult:

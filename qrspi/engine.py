@@ -50,7 +50,9 @@ class EngineState:
 
     def save(self, path: Path) -> Path:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp_file = path.with_suffix('.tmp')
+        tmp_file.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp_file.replace(path)
         return path
 
     @classmethod
@@ -114,8 +116,9 @@ class WorkflowEngine:
     def run(self, user_input: str = "", until_gate: bool = True, max_stages: Optional[int] = None) -> List[str]:
         messages: List[str] = []
         stages_run = 0
+        max_safe_loops = 100  # 安全阀，防止异常状态导致死循环
 
-        while True:
+        while stages_run < max_safe_loops:
             current = self.workflow.current_stage
 
             if self.state.status == "waiting_approval":
@@ -134,6 +137,8 @@ class WorkflowEngine:
 
             if until_gate and self.state.status == "waiting_approval":
                 break
+        else:
+            messages.append("[安全阀触发] 超过最大循环次数，强制终止")
 
         return messages
 

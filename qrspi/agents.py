@@ -14,6 +14,7 @@
 
 import json
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Callable
@@ -252,47 +253,38 @@ class AgentOrchestrator:
         self.context_used: int = 0  # 当前 Session 已使用的 Context
         self.max_context: int = 16000  # Context Window 上限 (40% of 40K)
 
-    def run_parallel(self, tasks: List[Task]) -> List[TaskResult]:
+    def run_parallel(self, tasks: List[Task], max_workers: int = 4) -> List[TaskResult]:
         """
         并行执行独立的任务
 
         Anthropic 编译器项目模式: 16 个并行 Agent
-        我们只并行化无依赖的任务
+        使用 ThreadPoolExecutor 并行化无依赖的任务，
+        有依赖的任务按拓扑顺序分批执行。
         """
-        # 筛选可立即执行的任务（无依赖或依赖已完成）
-        ready_tasks = [t for t in tasks if not t.dependencies]
-        pending_tasks = [t for t in tasks if t.dependencies]
+        results: List[TaskResult] = []
+        completed_ids: set[str] = set()
+        remaining = list(tasks)
 
-        results = []
-
-        # 执行就绪的任务
-        for task in ready_tasks:
-            result = self._execute_task(task)
-            results.append(result)
-            self._update_session_context(result)
-
-        # 检查依赖是否满足，执行后续任务
-        completed_ids = {r.task_id for r in results}
-        while pending_tasks:
-            newly_ready = []
-            still_pending = []
-
-            for task in pending_tasks:
-                if all(dep in completed_ids for dep in task.dependencies):
-                    newly_ready.append(task)
-                else:
-                    still_pending.append(task)
-
-            if not newly_ready:
+        while remaining:
+            # 筛选当前可执行的任务（无未满足依赖）
+            ready = [t for t in remaining if all(dep in completed_ids for dep in t.dependencies)]
+            if not ready:
                 break
 
-            for task in newly_ready:
-                result = self._execute_task(task)
-                results.append(result)
-                completed_ids.add(task.task_id)
-                self._update_session_context(result)
+            # 从 remaining 中移除 ready 任务
+            remaining = [t for t in remaining if t not in ready]
 
-            pending_tasks = still_pending
+            # 并行执行就绪任务
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_task = {
+                    executor.submit(self._execute_task, task): task
+                    for task in ready
+                }
+                for future in as_completed(future_to_task):
+                    result = future.result()
+                    results.append(result)
+                    completed_ids.add(result.task_id)
+                    self._update_session_context(result)
 
         return results
 
