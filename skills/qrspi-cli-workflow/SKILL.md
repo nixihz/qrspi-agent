@@ -1,57 +1,57 @@
 ---
 name: qrspi-cli-workflow
-description: 当用户希望用当前项目的 `qrspi` CLI 来初始化、查看、推进或自动执行 QRSPI 工作流时使用。适用于调用 `qrspi init`、`qrspi list`、`qrspi status`、`qrspi stage`、`qrspi prompt --render`、`qrspi advance`、`qrspi run`、`qrspi approve`、`qrspi slice`、`qrspi context`、`qrspi budget` 等命令，而不是手工模拟阶段管理的场景。
+description: Use when the user wants to initialize, inspect, advance, or auto-run a QRSPI workflow via the `qrspi` CLI. Covers `qrspi init`, `qrspi list`, `qrspi status`, `qrspi stage`, `qrspi prompt --render`, `qrspi advance`, `qrspi run`, `qrspi approve`, `qrspi slice`, `qrspi context`, `qrspi budget`. Do NOT manually simulate stage management when the CLI can handle it.
 ---
 
 # QRSPI CLI Workflow
 
-## 何时使用
+## When to use
 
-当任务符合以下任一特征时使用本 skill：
+Trigger this skill when any of the following is true:
 
-- 用户要在某个项目里启动或继续一个 QRSPI feature 工作流
-- 用户要查看当前阶段、完整状态、context 策略或预算信息
-- 用户要渲染某一阶段 prompt 给外部 agent 或 runner 使用
-- 用户要推进阶段、审批 gate、添加切片，或直接自动执行多阶段流程
-- 用户明确提到 `qrspi`、`.qrspi/`、feature 工作流、阶段推进、gate、runner
+- The user wants to start or resume a QRSPI feature workflow in a project
+- The user wants to check current stage, full status, context strategy, or budget
+- The user wants to render a stage prompt for an external agent or runner
+- The user wants to advance stages, approve gates, add slices, or auto-run multi-stage flows
+- The user explicitly mentions `qrspi`, `.qrspi/`, feature workflow, stage advancement, gate, or runner
 
-如果只是讨论 QRSPI 方法论，不涉及当前 CLI 的真实操作，这个 skill 不是首选。
+If the discussion is about QRSPI methodology without real CLI operations, this skill is NOT the right choice.
 
-## 核心原则
+## Core principles
 
-- 优先调用 `qrspi` CLI，不要手工模拟状态机
-- 优先读取当前 `.qrspi/` 状态，再决定下一步命令
-- 优先沿着 CLI 已定义的阶段和 gate 走，不要跳过 `approve`
-- 如果 CLI 已经能完成某件事，不要改用临时文件约定或自造流程
+- Prefer calling the `qrspi` CLI; do NOT manually simulate the state machine
+- Read the current `.qrspi/` state first before deciding the next command
+- Follow the CLI-defined stages and gates; do NOT skip `approve`
+- If the CLI can already do something, do NOT invent temporary file conventions or custom flows
 
-## 安装方式
+## Installation
 
-这个 skill 目录可以通过 `skills` CLI 安装到支持的 agent 中。
+This skill directory can be installed into supported agents via the `skills` CLI.
 
-推荐写法是把“仓库源”和“skill 名称”分开传：
+Recommended syntax separates the repository source from the skill name:
 
 ```bash
-# 从当前仓库本地路径安装
+# Install from local repository path
 npx skills add . --skill qrspi-cli-workflow
 
-# 从 Git 仓库安装
+# Install from Git repository
 npx skills add ssh://git@git.xiezhi.xin:2222/iamx/qrspi-agent.git --skill qrspi-cli-workflow
 ```
 
-如果要明确安装到特定 agent，可追加 `--agent codex`、`--agent claude-code`；
-如果希望安装到用户级目录而不是当前项目，可追加 `--global`。
+To target a specific agent, append `--agent codex` or `--agent claude-code`.
+To install globally instead of the current project, append `--global`.
 
-## 默认工作顺序
+## Default workflow
 
-### 1. 先判断是否已初始化
+### 1. Check if already initialized
 
-优先检查：
+Prefer checking:
 
-- 当前项目根目录
-- 是否存在 `.qrspi/`
-- 是否已有 feature 状态
+- The current project root
+- Whether `.qrspi/` exists
+- Whether there is already a feature state
 
-常用命令：
+Common commands:
 
 ```bash
 qrspi list --root .
@@ -59,142 +59,144 @@ qrspi status --root .
 qrspi stage --root .
 ```
 
-如果 CLI 提示尚未初始化（`list` 为空或 `status` 报错），再使用：
+If the CLI reports not initialized (list is empty or status errors), then use:
 
 ```bash
 qrspi init <feature_id> --root .
 ```
 
-### 2. 需要看当前阶段时
+### 2. View current stage
 
-使用：
+Use:
 
 ```bash
 qrspi stage --root .
 qrspi status --root .
 ```
 
-约定：
+Convention:
 
-- `stage` 看当前阶段摘要
-- `status` 看全阶段状态和 runner 状态
+- `stage` shows the current stage summary
+- `status` shows the full stage state and runner state
 
-### 3. 需要当前阶段指令时
+### 3. Get the current stage prompt
 
-优先让 CLI 渲染，而不是在 skill 里重写阶段提示。
+Let the CLI render the prompt rather than rewriting stage instructions inside the skill.
 
-使用：
+Use:
 
 ```bash
-qrspi prompt Q --render --root . --input "需求描述"
+qrspi prompt Q --render --root . --input "requirement description"
 qrspi prompt D --render --root .
 ```
 
-规则：
+Rules:
 
-- 有用户原始需求时，传 `--input`
-- 只需要看模板结构时，不带 `--render`
-- 阶段码必须来自 `Q/R/D/S/P/W/I/PR`
+- Pass `--input` when there is a raw user requirement
+- Omit `--render` when you only want to see the template structure
+- Stage codes must be one of `Q/R/D/S/P/W/I/PR`
 
-### 4. 需要推进阶段时
+### 4. Advance a stage
 
-先确认当前阶段产物已经存在，再调用：
+Confirm the current stage artifact exists before calling:
 
 ```bash
 qrspi advance --root .
 ```
 
-只有在用户明确接受风险时，才考虑：
+Only consider:
 
 ```bash
 qrspi advance --root . --force
 ```
 
-不要默认使用 `--force`。
+when the user explicitly accepts the risk.
 
-### 5. 遇到 gate 时
+Do NOT default to `--force`.
 
-`D`、`S`、`PR` 这类 gate 阶段，优先停下来让用户 review。
+### 5. Hit a gate
 
-确认后使用：
+For gate stages (`D`, `S`, `PR`), pause and let the user review.
+
+After confirmation, use:
 
 ```bash
 qrspi approve --root .
 ```
 
-如需显式指定阶段，可用：
+To explicitly specify a stage:
 
 ```bash
 qrspi approve D --root .
 ```
 
-不要绕过 `approve` 直接修改状态。
+Do NOT bypass `approve` by directly modifying state.
 
-### 6. 需要自动执行时
+### 6. Auto-run
 
-使用：
+Use:
 
 ```bash
-qrspi run --root . --input "需求描述"
+qrspi run --root . --input "requirement description"
 ```
 
-如果用户希望明确 runner，可用：
+If the user wants to specify a runner:
 
 ```bash
 qrspi run --root . --runner codex --model gpt-5.4
 qrspi run --root . --runner mock
 ```
 
-补充规则：
+Additional rules:
 
-- `--no-stop-at-gate` 默认不要开
-- 除非用户要求，否则不要跨很多阶段盲跑
-- 需要受控执行时，优先配合 `--max-stages`
+- Do NOT enable `--no-stop-at-gate` by default
+- Unless the user requests it, do NOT blindly run across many stages
+- For controlled execution, prefer using `--max-stages`
 
-### 7. 需要管理垂直切片时
+### 7. Manage vertical slices
 
-使用：
+Use:
 
 ```bash
 qrspi slice list --root .
-qrspi slice add mock-api --desc "创建 mock API" --order 1 --checkpoint "curl 通过" --root .
+qrspi slice add mock-api --desc "Create mock API" --order 1 --checkpoint "curl passes" --root .
 ```
 
-要求：
+Requirements:
 
-- 切片名简洁稳定
-- `order` 明确
-- `checkpoint` 可验证
+- Slice names should be concise and stable
+- `order` must be explicit
+- `checkpoint` must be verifiable
 
-### 8. 需要查看约束信息时
+### 8. View constraint information
 
-使用：
+Use:
 
 ```bash
 qrspi context --root .
 qrspi budget
 ```
 
-适合在进入新阶段前确认 context 装载范围和提示预算。
+Good for confirming context loading scope and instruction budget before entering a new stage.
 
-### 9. 需要切换语言时
+### 9. Switch language
 
-使用：
+Use:
 
 ```bash
-# 显式指定中文
-qrspi run --root . --input "需求" --lang zh
+# Explicit Chinese
+qrspi run --root . --input "requirement" --lang zh
 
-# 或依赖系统 LANG 环境变量自动识别
+# Or rely on system LANG auto-detection
 export LANG=zh_CN.UTF-8
-qrspi run --root . --input "需求"
+qrspi run --root . --input "requirement"
 ```
 
-默认语言为英文，可通过 `--lang` 或系统 `LANG` 覆盖。
+Default language is English. Override via `--lang` or system `LANG`.
 
-## 输出与状态约定
+## Output and state conventions
 
-默认认为 CLI 会使用：
+The CLI uses:
 
 - `.qrspi/<feature>/state.json`
 - `.qrspi/<feature>/artifacts/`
@@ -202,22 +204,22 @@ qrspi run --root . --input "需求"
 - `.qrspi/<feature>/slices/`
 - `.qrspi/<feature>/runs/`
 
-处理任务时应基于这些真实目录判断状态，而不是靠口头假设。
+Base decisions on these real directories, not assumptions.
 
-## 何时停下来
+## When to stop
 
-以下情况应暂停并告知用户：
+Pause and inform the user when:
 
-- `qrspi` 尚未初始化，且 feature_id 不明确
-- 当前阶段缺少产物，无法安全 `advance`
-- 已到 gate 阶段，需要人工确认
-- runner 不存在或命令执行失败
-- CLI 输出与用户预期冲突，需要先对齐工作目录或 feature
+- `qrspi` is not yet initialized and feature_id is unclear
+- The current stage lacks an artifact, making `advance` unsafe
+- A gate stage is reached and requires human confirmation
+- The runner does not exist or the command fails
+- CLI output conflicts with user expectations; align on working directory or feature first
 
-## 不该做的事
+## What NOT to do
 
-- 不要在 CLI 已能处理阶段时手工改 `.qrspi` 状态
-- 不要跳过 `status/stage` 就假设当前 feature
-- 不要默认 `--force`
-- 不要把方法论说明当成 CLI 执行结果
-- 不要在 gate 阶段装作已经审批完成
+- Do NOT manually modify `.qrspi/` state when the CLI can handle stages
+- Do NOT assume the current feature without running `status`/`stage`
+- Do NOT default to `--force`
+- Do NOT treat methodology explanations as CLI execution results
+- Do NOT pretend a gate stage has already been approved
