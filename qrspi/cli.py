@@ -7,7 +7,7 @@ Usage:
     qrspi stage              # 查看当前阶段
     qrspi prompt <stage>     # 获取指定阶段的 prompt
     qrspi advance            # 推进到下一阶段
-    qrspi run                # 自动执行直到 gate 或结束
+    qrspi run [--feature-id <id>]  # 自动执行直到 gate 或结束
     qrspi approve            # 确认 D/S/PR gate 并继续
     qrspi status             # 查看完整状态
     qrspi slice --add <name> --desc <description> --order <n>
@@ -449,6 +449,7 @@ Examples:
     # run
     run_parser = subparsers.add_parser("run", help="自动执行工作流直到 gate 或完成")
     run_parser.add_argument("--root", help="项目根目录")
+    run_parser.add_argument("--feature-id", dest="feature_id", help="指定 feature 标识符；省略时取最新")
     run_parser.add_argument("--input", help="Q 阶段的初始需求输入")
     _add_runner_args(run_parser)
     run_parser.add_argument("--max-stages", type=int, help="本次最多执行多少阶段")

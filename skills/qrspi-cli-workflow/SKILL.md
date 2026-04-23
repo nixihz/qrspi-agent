@@ -24,6 +24,23 @@ description: 当用户希望用当前项目的 `qrspi` CLI 来初始化、查看
 - 优先沿着 CLI 已定义的阶段和 gate 走，不要跳过 `approve`
 - 如果 CLI 已经能完成某件事，不要改用临时文件约定或自造流程
 
+## 安装方式
+
+这个 skill 目录可以通过 `skills` CLI 安装到支持的 agent 中。
+
+推荐写法是把“仓库源”和“skill 名称”分开传：
+
+```bash
+# 从当前仓库本地路径安装
+npx skills add . --skill qrspi-cli-workflow
+
+# 从 Git 仓库安装
+npx skills add ssh://git@git.xiezhi.xin:2222/iamx/qrspi-agent.git --skill qrspi-cli-workflow
+```
+
+如果要明确安装到特定 agent，可追加 `--agent codex`、`--agent claude-code`；
+如果希望安装到用户级目录而不是当前项目，可追加 `--global`。
+
 ## 默认工作顺序
 
 ### 1. 先判断是否已初始化

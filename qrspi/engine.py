@@ -13,10 +13,11 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from qrspi.context import ContextBuilder
+from qrspi.parsers import ParsedArtifact, parse_stage_output
 from qrspi.prompts import registry
 from qrspi.runner import BaseRunner, build_runner
 from qrspi.validators import validate_stage_output
-from qrspi.workflow import QRSPIWorkflow, SessionConfig, Stage
+from qrspi.workflow import QRSPIWorkflow, SessionConfig, Stage, VerticalSlice
 
 
 @dataclass
@@ -33,6 +34,7 @@ class StageRunRecord:
     run_dir: str
     artifact_path: str = ""
     validation_path: str = ""
+    parsed_artifact_path: str = ""
     error: str = ""
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
 
@@ -172,7 +174,7 @@ class WorkflowEngine:
         return f"{current.value} 已确认，已进入 {next_stage.value}"
 
     def get_status(self) -> Dict[str, str]:
-        return {
+        status = {
             "stage": self.workflow.current_stage.value,
             "stage_name": self.workflow.current_stage.full_name,
             "status": self.state.status,
@@ -180,6 +182,10 @@ class WorkflowEngine:
             "model": getattr(self.runner, "model", ""),
             "last_error": self.state.last_error,
         }
+        if self.workflow.work_tree and self.workflow.work_tree.current_slice:
+            status["current_slice"] = self.workflow.work_tree.current_slice.name
+            status["current_slice_status"] = self.workflow.work_tree.current_slice.status
+        return status
 
     def _run_current_stage(self, user_input: str = "") -> str:
         stage = self.workflow.current_stage
@@ -240,6 +246,7 @@ class WorkflowEngine:
         artifact_path = self.workflow.save_artifact(stage, runner_result.stdout, metadata={"runner": self.runner.name, "attempt": attempt})
         validation = validate_stage_output(stage, runner_result.stdout)
         validation_path = validation.save(run_dir / "validation.json")
+        parsed_artifact_path = ""
 
         run_status = "passed" if validation.passed else "validation_failed"
         self.state.history.append(
@@ -250,6 +257,7 @@ class WorkflowEngine:
                 run_dir=str(run_dir),
                 artifact_path=str(artifact_path),
                 validation_path=str(validation_path),
+                parsed_artifact_path=parsed_artifact_path,
                 error="; ".join(validation.errors),
             )
         )
@@ -259,6 +267,11 @@ class WorkflowEngine:
             self.state.last_error = "; ".join(validation.errors)
             self._save_engine_state()
             return f"{stage.value} 校验失败: {self.state.last_error}"
+
+        parsed_artifact = parse_stage_output(stage, runner_result.stdout)
+        parsed_artifact_path = str(self._save_parsed_artifact(stage, parsed_artifact, run_dir))
+        self.state.history[-1].parsed_artifact_path = parsed_artifact_path
+        self._apply_structured_artifact(stage, parsed_artifact)
 
         policy = self.POLICIES[stage]
         next_stage = stage.next_stage()
@@ -287,3 +300,38 @@ class WorkflowEngine:
     def _save_engine_state(self):
         self.state.updated_at = datetime.now().isoformat()
         self.state.save(self.state_path)
+
+    def _save_parsed_artifact(self, stage: Stage, parsed_artifact: ParsedArtifact, run_dir: Path) -> Path:
+        """保存结构化解析结果，兼顾运行记录与阶段最新快照。"""
+        run_copy_path = parsed_artifact.save(run_dir / "parsed_artifact.json")
+        structured_dir = self.config.output_path / "structured"
+        structured_dir.mkdir(parents=True, exist_ok=True)
+        latest_path = structured_dir / f"{stage.value}_{datetime.now().strftime('%Y-%m-%d')}.json"
+        parsed_artifact.save(latest_path)
+        return run_copy_path
+
+    def _apply_structured_artifact(self, stage: Stage, parsed_artifact: ParsedArtifact) -> None:
+        """把结构化产物写回工作流状态，形成可消费闭环。"""
+        if stage != Stage.WORK_TREE:
+            return
+
+        slices = [
+            VerticalSlice(
+                name=item["name"],
+                description=item.get("description", ""),
+                order=item.get("order", idx + 1),
+                dependencies=item.get("dependencies", []),
+                testable=item.get("testable", True),
+                status=item.get("status", "pending"),
+                checkpoint=item.get("checkpoint", ""),
+                tasks=item.get("tasks", []),
+            )
+            for idx, item in enumerate(parsed_artifact.structured_data.get("slices", []))
+        ]
+        if not slices:
+            return
+
+        self.workflow.create_work_tree(
+            slices=slices,
+            current_slice_idx=parsed_artifact.structured_data.get("current_slice_idx", 0),
+        )

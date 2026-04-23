@@ -62,8 +62,18 @@ class ContextBuilder:
             )
             blocks.append(f"## {dep.full_name}\n\n{summary}")
 
+        work_tree_summary = self._build_work_tree_context(stage)
+        if work_tree_summary:
+            blocks.append(work_tree_summary)
+
         focused = "\n\n---\n\n".join(blocks)
         return ContextPack(stage=stage.value, entries=entries, focused_context=focused)
+
+    def _build_work_tree_context(self, stage: Stage) -> str:
+        """执行阶段补充工作树摘要，避免 I/PR 与 W 阶段脱节。"""
+        if stage not in {Stage.IMPLEMENT, Stage.PULL_REQUEST}:
+            return ""
+        return self.workflow.get_work_tree_summary()
 
     def _summarize(self, content: str) -> str:
         """语义化摘要：保留标题结构，折叠代码块，截断长段落。"""

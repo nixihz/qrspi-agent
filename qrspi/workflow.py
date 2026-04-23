@@ -151,6 +151,7 @@ class VerticalSlice:
     testable: bool = True
     status: str = "pending"  # pending, in_progress, completed, reviewed
     checkpoint: str = ""  # 每个切片后的验证点
+    tasks: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict:
         return asdict(self)
@@ -199,7 +200,7 @@ class QRSPIWorkflow:
         self.current_stage: Stage = Stage.QUESTIONS
         self.state_file = config.output_path / "state.json"
         self.artifacts: Dict[str, StageArtifact] = {}
-        self.work_tree: Optional[WorkTree] = None
+        self.work_tree: Optional[WorkTree] = self.load_work_tree()
         self._load_state()
 
     def _load_state(self):
@@ -299,15 +300,69 @@ class QRSPIWorkflow:
 
         return "\n\n---\n\n".join(context_parts)
 
-    def create_work_tree(self, slices: List[VerticalSlice]):
+    def create_work_tree(self, slices: List[VerticalSlice], current_slice_idx: int = 0):
         """创建工作树"""
-        self.work_tree = WorkTree(slices=slices)
+        self.work_tree = WorkTree(slices=slices, current_slice_idx=current_slice_idx)
         slices_path = self.config.output_path / "slices"
         self.work_tree.save(slices_path)
         print(f"[QRSPI] 工作树已创建: {len(slices)} 个垂直切片")
         for s in slices:
             status = "✓" if s.testable else "○"
             print(f"  {status} [{s.order}] {s.name}: {s.description}")
+
+    def load_work_tree(self) -> Optional[WorkTree]:
+        """从磁盘加载工作树定义"""
+        work_tree_file = self.config.output_path / "slices" / "work_tree.json"
+        if not work_tree_file.exists():
+            return None
+
+        with open(work_tree_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        slices = [
+            VerticalSlice(
+                name=item["name"],
+                description=item.get("description", ""),
+                order=item.get("order", idx + 1),
+                dependencies=item.get("dependencies", []),
+                testable=item.get("testable", True),
+                status=item.get("status", "pending"),
+                checkpoint=item.get("checkpoint", ""),
+                tasks=item.get("tasks", []),
+            )
+            for idx, item in enumerate(data.get("slices", []))
+        ]
+        return WorkTree(
+            slices=slices,
+            current_slice_idx=data.get("current_slice_idx", 0),
+        )
+
+    def get_work_tree_summary(self) -> str:
+        """生成工作树摘要，供后续阶段注入上下文。"""
+        if not self.work_tree:
+            self.work_tree = self.load_work_tree()
+
+        if not self.work_tree or not self.work_tree.slices:
+            return ""
+
+        lines = ["## Work Tree 摘要", ""]
+        lines.append(f"- 当前切片索引: {self.work_tree.current_slice_idx + 1}/{len(self.work_tree.slices)}")
+
+        current = self.work_tree.current_slice
+        if current:
+            lines.append(f"- 当前切片: {current.name} ({current.status})")
+            if current.checkpoint:
+                lines.append(f"- 当前检查点: {current.checkpoint}")
+
+        lines.append("")
+        lines.append("### 垂直切片列表")
+        for slice_obj in self.work_tree.slices:
+            lines.append(
+                f"- [{slice_obj.order}] {slice_obj.name}: {slice_obj.description} "
+                f"(status={slice_obj.status}, tasks={len(slice_obj.tasks)})"
+            )
+
+        return "\n".join(lines)
 
     def get_stage_info(self) -> Dict:
         """获取当前阶段信息"""

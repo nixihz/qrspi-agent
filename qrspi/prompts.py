@@ -512,6 +512,14 @@ class PromptRegistry:
     def list_stages(self) -> List[str]:
         return list(self._prompts.keys())
 
+    def _get_status(self, count: int) -> str:
+        """根据指令数量获取状态"""
+        if count < 15:
+            return "✓"
+        if count < 20:
+            return "⚠"
+        return "✗"
+
     def get_budget_report(self) -> Dict:
         """生成指令预算报告"""
         report = {}
@@ -521,7 +529,7 @@ class PromptRegistry:
             report[stage] = {
                 "instructions": count,
                 "budget_used": f"{count/150*100:.1f}%",  # 150条为警戒线
-                "status": "✓" if count < 15 else "⚠" if count < 20 else "✗"
+                "status": self._get_status(count)
             }
             total += count
 

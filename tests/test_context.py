@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from qrspi.context import ContextBuilder, ContextPack
-from qrspi.workflow import QRSPIWorkflow, SessionConfig, Stage
+from qrspi.workflow import QRSPIWorkflow, SessionConfig, Stage, VerticalSlice
 
 
 class TestContextBuilder:
@@ -65,3 +65,21 @@ class TestContextBuilder:
         data = json.loads(path.read_text(encoding="utf-8"))
         assert data["stage"] == "Q"
         assert data["focused_context"] == "test"
+
+    def test_implement_stage_includes_work_tree_summary(self, tmp_path: Path):
+        config = SessionConfig(
+            feature_id="test-feat",
+            project_root=str(tmp_path),
+            output_dir=".qrspi",
+        )
+        workflow = QRSPIWorkflow(config)
+        workflow.save_artifact(Stage.WORK_TREE, '{"slices": []}')
+        workflow.create_work_tree(
+            [VerticalSlice(name="engine-core", description="状态机", order=1, checkpoint="状态可恢复")]
+        )
+
+        builder = ContextBuilder(workflow)
+        pack = builder.build(Stage.IMPLEMENT)
+
+        assert "Work Tree 摘要" in pack.focused_context
+        assert "engine-core" in pack.focused_context
