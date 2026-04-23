@@ -60,6 +60,11 @@ def validate_stage_output(stage: Stage, content: str) -> ValidationResult:
     return handler(content)
 
 
+def validate_stage_artifact(stage: Stage, content: str) -> ValidationResult:
+    """提供与结构大纲一致的校验入口命名。"""
+    return validate_stage_output(stage, content)
+
+
 def _base(stage: Stage, content: str) -> ValidationResult:
     result = ValidationResult(stage=stage.value, passed=True)
     if not content.strip():

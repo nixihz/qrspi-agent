@@ -24,6 +24,7 @@ DEFAULT_RUNNER_NAME = "claude"
 DEFAULT_MODELS = {
     "claude": "kimi-for-coding",
     "codex": "gpt-5.4",
+    "mock": "gpt-5.4",
 }
 
 
@@ -82,11 +83,13 @@ class BaseRunner:
                 timeout=timeout_seconds,
             )
         except subprocess.TimeoutExpired as exc:
+            raw_stdout = exc.stdout or b""
+            raw_stderr = exc.stderr or b""
             return RunnerResult(
                 ok=False,
                 command=command,
-                stdout=exc.stdout or "",
-                stderr=(exc.stderr or "")
+                stdout=raw_stdout.decode("utf-8", errors="replace") if isinstance(raw_stdout, bytes) else raw_stdout,
+                stderr=(raw_stderr.decode("utf-8", errors="replace") if isinstance(raw_stderr, bytes) else raw_stderr)
                 + f"\n{tool_name} command timed out after {timeout_seconds}s",
                 exit_code=124,
                 timed_out=True,
@@ -217,6 +220,9 @@ class CodexCliRunner(BaseRunner):
 
 class MockRunner(BaseRunner):
     name = "mock"
+
+    def __init__(self, model: Optional[str] = None):
+        self.model = resolve_runner_model(self.name, model)
 
     _OUTPUTS = {
         Stage.QUESTIONS: """# 技术问题清单
@@ -410,7 +416,19 @@ def approve(stage: str) -> None
 
     def run(self, stage: Stage, prompt: str, project_root: Path, run_dir: Path) -> RunnerResult:
         stdout = MockRunner._OUTPUTS.get(stage, f"# {stage.value}\n\nMock output")
-        return RunnerResult(ok=True, command=["mock"], stdout=stdout, stderr="", exit_code=0)
+        command = ["mock", "--stage", stage.value, "--model", self.model]
+        return RunnerResult(ok=True, command=command, stdout=stdout, stderr="", exit_code=0)
+
+
+def execute_runner(
+    runner: BaseRunner,
+    stage: Stage,
+    prompt: str,
+    project_root: Path,
+    run_dir: Path,
+) -> RunnerResult:
+    """统一执行入口，便于测试与引擎复用相同协议。"""
+    return runner.run(stage, prompt, project_root, run_dir)
 
 
 def build_runner(
@@ -422,7 +440,7 @@ def build_runner(
 ) -> BaseRunner:
     resolved_runner = resolve_runner_name(runner_name)
     if resolved_runner == "mock":
-        return MockRunner()
+        return MockRunner(model=model)
     if resolved_runner == "codex":
         return CodexCliRunner(
             timeout_seconds=timeout_seconds,
