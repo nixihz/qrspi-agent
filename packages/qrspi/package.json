@@ -34,13 +34,13 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://git.xiezhi.xin/iamx/qrspi-agent.git",
+    "url": "git+https://github.com/nixihz/qrspi-agent.git",
     "directory": "packages/qrspi"
   },
   "bugs": {
-    "url": "https://git.xiezhi.xin/iamx/qrspi-agent/issues"
+    "url": "https://github.com/nixihz/qrspi-agent/issues"
   },
-  "homepage": "https://git.xiezhi.xin/iamx/qrspi-agent#readme",
+  "homepage": "https://github.com/nixihz/qrspi-agent#readme",
   "engines": {
     "node": ">=20.0.0"
   },

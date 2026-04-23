@@ -23,7 +23,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://git.xiezhi.xin/iamx/qrspi-agent.git"
+    "url": "git+https://github.com/nixihz/qrspi-agent.git"
   },
   "engines": {
     "node": ">=20.0.0"

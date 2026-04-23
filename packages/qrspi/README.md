@@ -53,5 +53,5 @@ qrspi run --runner mock --input "Add user authentication"
 
 ## Documentation
 
-- English repo guide: <https://git.xiezhi.xin/iamx/qrspi-agent>
-- Chinese guide: <https://git.xiezhi.xin/iamx/qrspi-agent/tree/main/docs/README.zh.md>
+- English repo guide: <https://github.com/nixihz/qrspi-agent>
+- Chinese guide: <https://github.com/nixihz/qrspi-agent/blob/main/docs/README.zh.md>
