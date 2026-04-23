@@ -115,6 +115,19 @@ This repository includes a local skill:
 
 It is a utility skill that guides agents to prefer calling the project's `qrspi` CLI rather than manually simulating the workflow. Suitable for initializing features, checking status, rendering stage prompts, advancing stages, approving gates, managing slices, and driving automated execution via `run`.
 
+Install the skill into a supported agent with:
+
+```bash
+npx skills add https://github.com/nixihz/qrspi-agent.git --skill qrspi-cli-workflow
+```
+
+Installing the skill does not install the CLI binary. If `qrspi` is not available, install the npm package separately:
+
+```bash
+npm install -g qrspi-agent
+qrspi --help
+```
+
 ### 1. Initialize Workflow
 
 ```bash

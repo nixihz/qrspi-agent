@@ -115,6 +115,19 @@ node packages/qrspi/dist/cli/main.js --help
 
 它是一个工具型 skill，用于指导 agent 优先调用当前项目的 `qrspi` CLI，而不是手工模拟工作流。适合初始化 feature、查看状态、渲染阶段 prompt、推进阶段、审批 gate、管理切片以及驱动 `run` 自动执行。
 
+可通过下面的方式把 skill 安装到支持的 agent：
+
+```bash
+npx skills add https://github.com/nixihz/qrspi-agent.git --skill qrspi-cli-workflow
+```
+
+安装 skill 不会自动安装 CLI 二进制。如果机器上没有 `qrspi`，还需要单独安装 npm 包：
+
+```bash
+npm install -g qrspi-agent
+qrspi --help
+```
+
 ### 1. 初始化工作流
 
 ```bash

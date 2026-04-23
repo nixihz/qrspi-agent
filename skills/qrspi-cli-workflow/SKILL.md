@@ -26,26 +26,11 @@ If the discussion is about QRSPI methodology without real CLI operations, this s
 
 ## Installation
 
-This skill directory can be installed into supported agents via the `skills` CLI.
-
 Important:
 
 - Installing this skill only installs the skill instructions
 - It does NOT guarantee that the `qrspi` CLI is already available on the machine
 - If `qrspi` is missing, install the npm package `qrspi-agent`
-
-Recommended syntax separates the repository source from the skill name:
-
-```bash
-# Install from local repository path
-npx skills add . --skill qrspi-cli-workflow
-
-# Install from Git repository
-npx skills add https://github.com/nixihz/qrspi-agent.git --skill qrspi-cli-workflow
-```
-
-To target a specific agent, append `--agent codex` or `--agent claude-code`.
-To install globally instead of the current project, append `--global`.
 
 If the `qrspi` command is not available after the skill is installed, install the CLI package separately:
 
