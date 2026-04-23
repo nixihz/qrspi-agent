@@ -1,7 +1,7 @@
 {
-  "name": "qrspi",
+  "name": "qrspi-agent",
   "version": "1.0.0",
-  "description": "QRSPI CLI - Node.js/TypeScript 版结构化编程 Agent 工作流框架",
+  "description": "Structured programming agent workflow CLI for Node.js and TypeScript",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
+    "prepack": "npm run build",
     "prepublishOnly": "npm run build && npm test"
   },
   "keywords": [
@@ -33,7 +34,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@git.xiezhi.xin:2222/iamx/qrspi-agent.git",
+    "url": "git+https://git.xiezhi.xin/iamx/qrspi-agent.git",
     "directory": "packages/qrspi"
   },
   "bugs": {

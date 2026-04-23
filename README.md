@@ -101,7 +101,7 @@ CLI entrypoint:
 
 ```bash
 # Use directly via npx
-npx @qrspi/node --help
+npx qrspi --help
 
 # Or after local build
 node packages/qrspi/dist/cli/main.js --help

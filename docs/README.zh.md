@@ -101,7 +101,7 @@ CLI 入口：
 
 ```bash
 # 通过 npx 直接使用
-npx @qrspi/node --help
+npx qrspi --help
 
 # 或本地构建后
 node packages/qrspi/dist/cli/main.js --help

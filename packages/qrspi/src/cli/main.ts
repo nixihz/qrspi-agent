@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { createRequire } from "module";
 import { resolve, join } from "path";
 
 import type {
@@ -45,7 +46,8 @@ import {
 import { createPromptRegistry, renderStagePrompt } from "../prompts/template-registry.js";
 import { buildContextPack } from "../context/context-builder.js";
 
-const VERSION = "1.0.0";
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require("../../package.json") as { version: string };
 
 function resolveLangFromEnv(): string {
   const envLang = process.env.LANG ?? "";
