@@ -146,6 +146,7 @@ Stage definitions are in `packages/qrspi/src/workflow/stage-schema.ts`. Gate pol
 
 ```bash
 qrspi init <feature_id> --root <dir>          # Initialize workflow
+qrspi list --root <dir>                       # List all workflow features
 qrspi stage --root <dir>                      # View current stage
 qrspi prompt <Q/R/D/S/P/W/I/PR> --render     # Get/render stage prompt
 qrspi advance --root <dir>                    # Manually advance to next stage

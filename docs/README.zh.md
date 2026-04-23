@@ -178,7 +178,24 @@ qrspi run --runner mock --input "添加用户认证功能"
 qrspi approve
 ```
 
-### 4. 查看状态
+### 4. 列出工作流
+
+```bash
+qrspi list
+```
+
+输出:
+```
+============================================================
+QRSPI Workflows
+============================================================
+  ✓ auth: PR (completed)
+  ⏸ login-ui: D (waiting_approval)
+  ○ payment: Q (ready)
+============================================================
+```
+
+### 5. 查看状态
 
 ```bash
 qrspi status

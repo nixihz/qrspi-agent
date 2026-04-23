@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, access } from "fs/promises";
+import { readFile, writeFile, mkdir, access, readdir } from "fs/promises";
 import { join } from "path";
 import type {
   SessionConfig,
@@ -225,4 +225,27 @@ export function transitionWorkflowState(
     status,
     updatedAt: new Date().toISOString(),
   };
+}
+
+export async function listFeatures(projectRoot: string, outputDir: string): Promise<Array<{ featureId: string; currentStage: string; status: string }>> {
+  const qrspiDir = join(projectRoot, outputDir);
+  const features: Array<{ featureId: string; currentStage: string; status: string }> = [];
+  try {
+    const dirs = await readdir(qrspiDir, { withFileTypes: true });
+    for (const d of dirs) {
+      if (!d.isDirectory()) continue;
+      const state = await readJson<{ current_stage?: string; feature_id?: string; timestamp?: string }>(join(qrspiDir, d.name, "state.json"));
+      const engine = await readJson<{ status?: string }>(join(qrspiDir, d.name, "engine_state.json"));
+      if (state) {
+        features.push({
+          featureId: state.feature_id ?? d.name,
+          currentStage: state.current_stage ?? "?",
+          status: engine?.status ?? "unknown",
+        });
+      }
+    }
+  } catch {
+    // no .qrspi dir
+  }
+  return features;
 }

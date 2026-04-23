@@ -116,6 +116,24 @@ export function formatApproveResult(stage: StageCode, nextStage: StageCode): str
   ].join("\n");
 }
 
+export function formatFeatureList(features: Array<{ featureId: string; currentStage: string; status: string }>): string {
+  if (features.length === 0) return "No workflows found.";
+
+  const lines: string[] = [
+    "============================================================",
+    "QRSPI Workflows",
+    "============================================================",
+  ];
+
+  for (const f of features) {
+    const statusIcon = f.status === "completed" ? "✓" : f.status === "waiting_approval" ? "⏸" : "○";
+    lines.push(`  ${statusIcon} ${f.featureId}: ${f.currentStage} (${f.status})`);
+  }
+
+  lines.push("============================================================");
+  return lines.join("\n");
+}
+
 export function print(msg: string): void {
   process.stdout.write(msg + "\n");
 }

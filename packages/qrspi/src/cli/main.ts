@@ -24,12 +24,14 @@ import {
   createInitialEngineState,
   readWorkTree,
   writeWorkTree,
+  listFeatures,
 } from "../storage/file-repository.js";
 import { buildRunner, resolveRunnerName, resolveRunnerModel } from "../runner/index.js";
 import {
   formatStatusOutput,
   formatStageOutput,
   formatApproveResult,
+  formatFeatureList,
   print,
   printErr,
 } from "./output.js";
@@ -113,6 +115,13 @@ export async function handleStageCommand(opts: CliGlobalOptions): Promise<number
 
   const state = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
   print(formatStageOutput(state));
+  return 0;
+}
+
+export async function handleListCommand(opts: CliGlobalOptions): Promise<number> {
+  const projectRoot = resolve(opts.root ?? process.cwd());
+  const features = await listFeatures(projectRoot, ".qrspi");
+  print(formatFeatureList(features));
   return 0;
 }
 
@@ -335,7 +344,7 @@ export async function main(argv?: string[]): Promise<number> {
   program
     .name("qrspi")
     .version(VERSION)
-    .description("QRSPI CLI - Node.js/TypeScript Edition");
+    .description("Structured programming agent workflow framework. Orchestrates an 8-stage pipeline (Questions → Research → Design → Structure → Plan → Work Tree → Implement → Pull Request) with automated artifact validation, bilingual prompts, and gate approvals.");
 
   const globalOpts = (cmd: Command) =>
     cmd
@@ -360,6 +369,15 @@ export async function main(argv?: string[]): Promise<number> {
       .description("Show workflow status")
   ).action(async (opts: CliGlobalOptions) => {
     const code = await handleStatusCommand(opts);
+    process.exitCode = code;
+  });
+
+  globalOpts(
+    program
+      .command("list")
+      .description("List all workflow features")
+  ).action(async (opts: CliGlobalOptions) => {
+    const code = await handleListCommand(opts);
     process.exitCode = code;
   });
 

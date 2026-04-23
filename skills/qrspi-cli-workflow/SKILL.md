@@ -1,6 +1,6 @@
 ---
 name: qrspi-cli-workflow
-description: 当用户希望用当前项目的 `qrspi` CLI 来初始化、查看、推进或自动执行 QRSPI 工作流时使用。适用于调用 `qrspi init`、`qrspi status`、`qrspi stage`、`qrspi prompt --render`、`qrspi advance`、`qrspi run`、`qrspi approve`、`qrspi slice`、`qrspi context`、`qrspi budget` 等命令，而不是手工模拟阶段管理的场景。
+description: 当用户希望用当前项目的 `qrspi` CLI 来初始化、查看、推进或自动执行 QRSPI 工作流时使用。适用于调用 `qrspi init`、`qrspi list`、`qrspi status`、`qrspi stage`、`qrspi prompt --render`、`qrspi advance`、`qrspi run`、`qrspi approve`、`qrspi slice`、`qrspi context`、`qrspi budget` 等命令，而不是手工模拟阶段管理的场景。
 ---
 
 # QRSPI CLI Workflow
@@ -54,11 +54,12 @@ npx skills add ssh://git@git.xiezhi.xin:2222/iamx/qrspi-agent.git --skill qrspi-
 常用命令：
 
 ```bash
+qrspi list --root .
 qrspi status --root .
 qrspi stage --root .
 ```
 
-如果 CLI 提示尚未初始化，再使用：
+如果 CLI 提示尚未初始化（`list` 为空或 `status` 报错），再使用：
 
 ```bash
 qrspi init <feature_id> --root .
@@ -155,8 +156,8 @@ qrspi run --root . --runner mock
 使用：
 
 ```bash
-qrspi slice --list --root .
-qrspi slice --add mock-api --desc "创建 mock API" --order 1 --checkpoint "curl 通过" --root .
+qrspi slice list --root .
+qrspi slice add mock-api --desc "创建 mock API" --order 1 --checkpoint "curl 通过" --root .
 ```
 
 要求：
@@ -176,12 +177,28 @@ qrspi budget
 
 适合在进入新阶段前确认 context 装载范围和提示预算。
 
+### 9. 需要切换语言时
+
+使用：
+
+```bash
+# 显式指定中文
+qrspi run --root . --input "需求" --lang zh
+
+# 或依赖系统 LANG 环境变量自动识别
+export LANG=zh_CN.UTF-8
+qrspi run --root . --input "需求"
+```
+
+默认语言为英文，可通过 `--lang` 或系统 `LANG` 覆盖。
+
 ## 输出与状态约定
 
 默认认为 CLI 会使用：
 
 - `.qrspi/<feature>/state.json`
 - `.qrspi/<feature>/artifacts/`
+- `.qrspi/<feature>/structured/`
 - `.qrspi/<feature>/slices/`
 - `.qrspi/<feature>/runs/`
 

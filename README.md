@@ -178,7 +178,24 @@ qrspi run --runner mock --input "Add user authentication"
 qrspi approve
 ```
 
-### 4. Check Status
+### 4. List Workflows
+
+```bash
+qrspi list
+```
+
+Output:
+```
+============================================================
+QRSPI Workflows
+============================================================
+  ✓ auth: PR (completed)
+  ⏸ login-ui: D (waiting_approval)
+  ○ payment: Q (ready)
+============================================================
+```
+
+### 5. Check Status
 
 ```bash
 qrspi status
