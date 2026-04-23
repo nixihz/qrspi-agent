@@ -1,0 +1,31 @@
+{
+  "name": "qrspi-agent",
+  "version": "1.0.0",
+  "description": "QRSPI Agent - 结构化编程 Agent 工作流框架",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace=packages/qrspi",
+    "test": "npm test --workspace=packages/qrspi",
+    "lint": "npm run lint --workspace=packages/qrspi",
+    "qrspi": "npm run build && node packages/qrspi/dist/cli/main.js"
+  },
+  "keywords": [
+    "qrspi",
+    "crispy",
+    "ai-agent",
+    "workflow",
+    "cli"
+  ],
+  "author": "Brian Xie",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@git.xiezhi.xin:2222/iamx/qrspi-agent.git"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

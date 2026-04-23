@@ -1,281 +1,285 @@
-# QRSPI Agent — 结构化编程 Agent 工作流
+# QRSPI Agent — Structured Programming Agent Workflow
 
-> **「我们把 AI 编程的一切都想错了。」** — Dex Horthy
+> **"We got AI programming all wrong."** — Dex Horthy
 
-从 RPI (Research-Plan-Implement) 到 QRSPI/CRISPY 的可落地方案实现。
+A practical implementation from RPI (Research-Plan-Implement) to QRSPI/CRISPY.
 
-文章原文: [从 RPI 到 QRSPI：重建第一个编程 Agent 结构化工作流](https://xiezhixin.com/2026-04-20-rpi-to-crispy/)
+Original article: [From RPI to QRSPI: Rebuilding the First Structured Programming Agent Workflow](https://xiezhixin.com/2026-04-20-rpi-to-crispy/)
+
+📖 [中文文档](./docs/README.zh.md)
 
 ---
 
-## 为什么需要这个工具
+## Why This Tool Is Needed
 
-2025 年，工程师们用编程 Agent 时都在撞同一堵墙：给 Agent 提示，得到看起来合理的代码，发现无法与现有代码库集成，然后花比手写更多的时间去修复。
+In 2025, engineers using programming agents all hit the same wall: prompt the agent, get code that looks reasonable, discover it can't integrate with the existing codebase, then spend more time fixing it than writing it by hand.
 
-RPI 解决了部分问题，但在大规模使用时暴露了三个隐蔽的失败模式：
+RPI solved part of the problem, but exposed three hidden failure modes at scale:
 
-| 失败模式 | 表现 | QRSPI 的解决方案 |
+| Failure Mode | Symptom | QRSPI Solution |
 |---------|------|----------------|
-| **指令预算** | Prompt 膨胀到 85+ 条指令，模型静默跳过关键步骤 | 每个阶段 8-13 条指令，远低于 150 条警戒线 |
-| **魔法词陷阱** | 需要特定短语才能触发正确行为 | 默认行为就是正确行为，无需秘密握手 |
-| **计划阅读幻觉** | 计划读起来合理，技术假设却是错的 | 验证机制比"读起来合理"更深入 |
+| **Instruction Budget** | Prompt bloats to 85+ instructions, model silently skips key steps | 8-13 instructions per stage, far below the 150-instruction danger line |
+| **Magic Word Trap** | Specific phrases needed to trigger correct behavior | Default behavior is correct behavior, no secret handshakes required |
+| **Plan-Reading Hallucination** | Plan reads reasonably, but technical assumptions are wrong | Validation goes deeper than "reads reasonably" |
 
 ---
 
-## 8 阶段工作流
+## 8-Stage Workflow
 
 ```mermaid
 flowchart LR
-    subgraph 对齐阶段 [Alignment 对齐阶段]
+    subgraph Alignment [Alignment Phase]
         direction LR
-        Q[Q<br/>Questions<br/>提问]
-        R[R<br/>Research<br/>研究]
-        D[D<br/>Design<br/>设计讨论]
-        S[S<br/>Structure<br/>结构大纲]
-        P[P<br/>Plan<br/>计划]
+        Q[Q<br/>Questions]
+        R[R<br/>Research]
+        D[D<br/>Design]
+        S[S<br/>Structure]
+        P[P<br/>Plan]
     end
 
-    subgraph 执行阶段 [Execution 执行阶段]
+    subgraph Execution [Execution Phase]
         direction LR
-        W[W<br/>Work Tree<br/>工作树]
-        I[I<br/>Implement<br/>实现]
-        PR[PR<br/>Pull Request<br/>拉取请求]
+        W[W<br/>Work Tree]
+        I[I<br/>Implement]
+        PR[PR<br/>Pull Request]
     end
 
     Q --> R
     R --> D
-    D -->|人工确认| S
-    S -->|人工确认| P
+    D -->|Human Approval| S
+    S -->|Human Approval| P
     P --> W
     W --> I
     I --> PR
-    PR -->|人工确认| Done([完成])
+    PR -->|Human Approval| Done([Done])
 
     style D fill:#ffcc80
     style S fill:#ffcc80
     style PR fill:#ffcc80
 ```
 
-### Alignment（对齐阶段）— 在写一行代码之前先把对齐做充分
+### Alignment Phase — Get Full Alignment Before Writing a Single Line of Code
 
 ```
 Q → R → D → S → P
 ```
 
-| 阶段 | 名称 | 核心产出 | 人工参与 |
+| Stage | Name | Core Output | Human Involvement |
 |------|------|---------|---------|
-| **Q** | Questions (提问) | 5-15 个具体技术问题 | 高 - 基于 feature ticket 生成 |
-| **R** | Research (研究) | 技术地图（代码事实记录） | 中 - review 发现 |
-| **D** | Design Discussion (设计讨论) | ~200 行 markdown 设计文档 | **最高** - 脑外科手术阶段 |
-| **S** | Structure Outline (结构大纲) | 函数签名 + 类型定义 + 垂直切片 | 高 - 确认接口 |
-| **P** | Plan (计划) | 战术实施文档 | 低 - 抽查即可 |
+| **Q** | Questions | 5-15 specific technical questions | High — generated from feature ticket |
+| **R** | Research | Technical map (code fact record) | Medium — review findings |
+| **D** | Design Discussion | ~200-line markdown design doc | **Highest** — brain surgery stage |
+| **S** | Structure Outline | Function signatures + type definitions + vertical slices | High — confirm interfaces |
+| **P** | Plan | Tactical implementation document | Low — spot-check only |
 
-### Execution（执行阶段）
+### Execution Phase
 
 ```
 Work Tree → I → PR
 ```
 
-| 阶段 | 名称 | 核心产出 | 关键原则 |
+| Stage | Name | Core Output | Key Principle |
 |------|------|---------|---------|
-| **W** | Work Tree (工作树) | 垂直切片任务树 | Mock API → 前端 → 数据库 |
-| **I** | Implement (实现) | 可工作的代码 | 每个切片独立 Session |
-| **PR** | Pull Request (拉取请求) | 结构化 PR 描述 | 人工必须阅读并拥有代码 |
+| **W** | Work Tree | Vertical slice task tree | Mock API → Frontend → Database |
+| **I** | Implement | Working code | Each slice is an independent session |
+| **PR** | Pull Request | Structured PR description | Human must read and own the code |
 
 ---
 
-## 快速开始
+## Quick Start
 
-### 安装
+### Installation
 
 ```bash
 git clone <repository>
 cd qrspi-agent
-pip install -e .
+npm install
+cd packages/qrspi && npm run build
 ```
 
-### 内置 Skill
+CLI entrypoint:
 
-仓库附带一个本地 skill：
+```bash
+# Use directly via npx
+npx @qrspi/node --help
+
+# Or after local build
+node packages/qrspi/dist/cli/main.js --help
+```
+
+### Built-in Skill
+
+This repository includes a local skill:
 
 - `skills/qrspi-cli-workflow`
 
-它是一个工具型 skill，用于指导 agent 优先调用当前项目的 `qrspi` CLI，而不是手工模拟工作流。适合初始化 feature、查看状态、渲染阶段 prompt、推进阶段、审批 gate、管理切片以及驱动 `run` 自动执行。
+It is a utility skill that guides agents to prefer calling the project's `qrspi` CLI rather than manually simulating the workflow. Suitable for initializing features, checking status, rendering stage prompts, advancing stages, approving gates, managing slices, and driving automated execution via `run`.
 
-### 1. 初始化工作流
+### 1. Initialize Workflow
 
 ```bash
 cd your-project
 qrspi init user-authentication --root .
 ```
 
-输出:
+Output:
 ```
-✅ QRSPI 工作流已初始化
+✅ QRSPI workflow initialized
    Feature: user-authentication
    Project: /path/to/your-project
    Output:  /path/to/your-project/.qrspi/user-authentication
 
-   当前阶段: Q - Questions (提问)
+   Current stage: Q - Questions
 
-   下一步: qrspi prompt Q --render
+   Next step: qrspi prompt Q --render
 ```
 
-### 2. 获取阶段 Prompt
+### 2. Get Stage Prompt
 
 ```bash
-# 查看 Q 阶段的指令和验证标准
+# View Q stage instructions and validation criteria
 qrspi prompt Q
 
-# 渲染完整 prompt（可以直接给 Claude Code / Codex CLI 使用）
-qrspi prompt Q --render --input "添加用户认证功能，支持邮箱+密码和 OAuth"
+# Render full prompt (ready to use with Claude Code / Codex CLI)
+qrspi prompt Q --render --input "Add user authentication with email+password and OAuth"
 ```
 
-### 3. 保存产物并推进
+### 3. Save Artifact and Advance
 
-将 Agent 的输出保存到 `.qrspi/<feature>/artifacts/Q_<date>.md`，然后：
+Save the agent's output to `.qrspi/<feature>/artifacts/Q_<date>.md`, then:
 
 ```bash
 qrspi advance
 ```
 
-### 3b. 自动执行直到人工 Gate
+### 3b. Auto-Execute Until Human Gate
 
-如果你已经配置好 Claude Code 或 Codex CLI，也可以让工作流自动推进：
+If you have Claude Code or Codex CLI configured, you can let the workflow auto-advance:
 
 ```bash
-# 使用真实 Claude Code，从当前阶段开始执行
-# 默认模型: kimi-for-coding
-qrspi run --input "添加用户认证功能，支持邮箱+密码和 OAuth"
+# Use real Claude Code, starting from current stage
+# Default model: kimi-for-coding
+qrspi run --input "Add user authentication with email+password and OAuth"
 
-# 使用 Codex CLI，从当前阶段开始执行
-# 默认模型: gpt-5.4
-qrspi run --runner codex --input "添加用户认证功能，支持邮箱+密码和 OAuth"
+# Use Codex CLI, starting from current stage
+# Default model: gpt-5.4
+qrspi run --runner codex --input "Add user authentication with email+password and OAuth"
 
-# 如果担心 Claude 长时间无响应，可以设置超时（秒）
-qrspi run --input "添加用户认证功能" --timeout 180
+# If concerned about Claude hanging, set timeout (seconds)
+qrspi run --input "Add user authentication" --timeout 180
 
-# 也可以显式指定模型
-qrspi run --input "添加用户认证功能" --model kimi-for-coding
+# Or explicitly specify model
+qrspi run --input "Add user authentication" --model kimi-for-coding
 
-# Codex CLI 也支持显式模型和配置覆盖
-qrspi run --runner codex --model gpt-5.4 --codex-config reasoning_effort=\"high\"
-qrspi run --runner codex --codex-profile work
+# Use mock runner for local state-machine validation
+qrspi run --runner mock --input "Add user authentication"
 
-# 本地验证状态机时可使用 mock runner
-qrspi run --runner mock --input "添加用户认证功能"
-
-# D / S / PR 阶段确认后继续
+# Continue after D / S / PR stage confirmation
 qrspi approve
 ```
 
-### 4. 查看状态
+### 4. Check Status
 
 ```bash
 qrspi status
 ```
 
-输出:
+Output:
 ```
 ============================================================
-QRSPI 工作流状态
+QRSPI Workflow Status
 ============================================================
->>>    Q: Questions (提问) [对齐]
-       R: Research (研究) [对齐]
-       D: Design Discussion (设计讨论) [对齐]
-       S: Structure Outline (结构大纲) [对齐]
-       P: Plan (计划) [对齐]
-       W: Work Tree (工作树) [执行]
-       I: Implement (实现) [执行]
-       PR: Pull Request (拉取请求) [执行]
+>>>    Q: Questions [Alignment]
+       R: Research [Alignment]
+       D: Design Discussion [Alignment]
+       S: Structure Outline [Alignment]
+       P: Plan [Alignment]
+       W: Work Tree [Execution]
+       I: Implement [Execution]
+       PR: Pull Request [Execution]
 ============================================================
 ```
 
 ---
 
-## 核心原则的实践
+## Core Principles in Practice
 
-### 1. Context Window 管理（40% 规则）
+### 1. Context Window Management (40% Rule)
 
 ```bash
-# 查看当前 Context 策略
+# View current context strategy
 qrspi context
 
-# 查看指令预算报告
+# View instruction budget report
 qrspi budget
 ```
 
-**规则:**
-- Context 利用率保持在 **40% 以下**
-- 达到 **60%** 时强制切换 Session
-- 进度持久化到磁盘，新 Session 只加载当前阶段所需
+**Rules:**
+- Keep context utilization **below 40%**
+- Force session switch at **60%**
+- Progress is persisted to disk; new sessions load only what's needed for the current stage
 
-### 2. 垂直切片（优于水平分层）
+### 2. Vertical Slices (Better Than Horizontal Layers)
 
 ```bash
-# 添加垂直切片
-qrspi slice --add "mock-api" --desc "创建 Mock API 端点" --order 1 --checkpoint "curl 测试通过"
-qrspi slice --add "frontend-ui" --desc "实现登录 UI" --order 2 --checkpoint "页面可交互"
-qrspi slice --add "database" --desc "添加用户表和迁移" --order 3 --checkpoint "单元测试通过"
+# Add vertical slices
+qrspi slice --add "mock-api" --desc "Create Mock API endpoints" --order 1 --checkpoint "curl test passes"
+qrspi slice --add "frontend-ui" --desc "Implement login UI" --order 2 --checkpoint "Page is interactive"
+qrspi slice --add "database" --desc "Add user table and migration" --order 3 --checkpoint "Unit tests pass"
 
-# 查看切片
+# List slices
 qrspi slice --list
 ```
 
-**为什么垂直切片更好:**
-- 每个切片后有可测试的 checkpoint
-- 避免把所有集成推迟到最后
-- 每个切片可以是干净 Context 的新 Session
+**Why vertical slices are better:**
+- Each slice has a testable checkpoint
+- Avoid deferring all integration to the end
+- Each slice can be a fresh session with clean context
 
-### 3. 子 Agent 作为 Context 防火墙
+### 3. Automated Closed Loop
 
-参考 Anthropic 100K 行编译器项目：16 个并行 Agent，每个专门化，通过文件系统产物协调。
+The current version already supports a basic automation chain:
 
-```python
-from qrspi.agents import AgentOrchestrator, Task, AgentRole
+- `qrspi run`: auto-execute current stage
+- Stage outputs are automatically persisted to `artifacts/`
+- Stage results are automatically validated by the validator
+- Artifacts are automatically parsed into structured data saved to `structured/`
+- `D`, `S`, `PR` stages automatically pause for human confirmation
+- `qrspi approve`: advance to next stage after human confirmation
 
-orchestrator = AgentOrchestrator(project_root=Path("."))
+### 4. Runner and Model Configuration
 
-# 创建并行研究任务
-tasks = orchestrator.create_research_tasks(
-    questions_file=Path("questions.json"),
-    code_dir=Path("src")
-)
-
-# 并行执行
-results = orchestrator.run_parallel(tasks)
-```
-
-### 4. 自动化闭环（MVP）
-
-当前版本已经支持一条基础自动化主链：
-
-- `qrspi run`：自动执行当前阶段
-- 阶段产出自动落盘到 `artifacts/`
-- 阶段结果自动经过 validator 校验
-- `D`、`S`、`PR` 阶段自动暂停等待人工确认
-- `qrspi approve`：人工确认后推进到下一阶段
-
-### 5. Runner 与模型配置
-
-当前支持三种 runner：
+Three runners are currently supported:
 
 - `claude`
 - `codex`
 - `mock`
 
-模型选择支持三层优先级：
+Model selection supports three levels of priority:
 
-1. 命令行参数 `--model`
-2. 环境变量 `QRSPI_<RUNNER>_MODEL` 或 `QRSPI_MODEL`
-3. runner 默认值
+1. Command-line argument `--model`
+2. Environment variable `QRSPI_<RUNNER>_MODEL` or `QRSPI_MODEL`
+3. Runner default
 
-默认模型：
+Default models:
 
 - `claude` -> `kimi-for-coding`
 - `codex` -> `gpt-5.4`
 
-示例：
+### Language Configuration
+
+QRSPI supports bilingual prompts (English and Chinese). Default is English.
+
+```bash
+# Use Chinese prompts and CLI output
+qrspi run --input "Add user authentication" --lang zh
+
+# Or rely on system LANG (e.g. zh_CN.UTF-8 -> Chinese, en_US.UTF-8 -> English)
+export LANG=zh_CN.UTF-8
+qrspi run --input "Add user authentication"
+```
+
+Example:
 
 ```bash
 export QRSPI_RUNNER=codex
@@ -285,136 +289,135 @@ qrspi status
 
 ---
 
-## 各阶段 Prompt 模板
+## Stage Prompt Templates
 
-每个阶段的 Prompt 设计遵循**指令预算原则**（8-13 条指令）：
+Each stage's prompt design follows the **instruction budget principle** (8-13 instructions):
 
 ### Q - Questions
 
-**指令 (7 条):**
-1. 分析给定的 feature ticket 或需求描述
-2. 识别实现该 feature 需要了解的所有技术信息
-3. 产出 5-15 个具体的、可研究的技术问题
-4. 每个问题必须指向代码库的某个具体方面
-5. 问题必须足够具体，能通过代码搜索找到答案
-6. 不要包含任何实现建议或方案
-7. 按依赖关系排序：基础架构问题在前，依赖问题在后
+**Instructions (7):**
+1. Analyze the given feature ticket or requirement description
+2. Identify all technical information needed to implement the feature
+3. Produce 5-15 specific, researchable technical questions
+4. Each question must point to a specific aspect of the codebase
+5. Questions must be specific enough to answer via code search
+6. Do not include any implementation suggestions or solutions
+7. Sort by dependency: infrastructure questions first, dependent questions later
 
-**验证标准:**
-- 问题数量在 5-15 之间
-- 每个问题有明确的搜索方向
-- 没有任何实现建议混入
-- blocking 问题不超过 3 个
+**Validation Criteria:**
+- Question count is between 5-15
+- Each question has a clear search direction
+- No implementation suggestions mixed in
+- No more than 3 blocking questions
 
 ### R - Research
 
-**关键设计:** 隐藏原始 feature ticket，只收集事实
+**Key Design:** Hide original feature ticket, collect only facts
 
-**指令:**
-- 基于技术问题清单，逐一研究代码库
-- 产出客观的技术地图（不是计划，不是建议）
-- 引用具体的文件路径、函数名和代码片段
-- 不要形成"如何修改"的意见
+**Instructions:**
+- Research the codebase based on the technical question list
+- Produce an objective technical map (not a plan, not suggestions)
+- Reference specific file paths, function names, and code snippets
+- Do not form opinions on "how to modify"
 
 ### D - Design Discussion
 
-**这是整个流程中杠杆最高的阶段。**
+**This is the highest-leverage stage in the entire flow.**
 
-产出约 200 行 markdown，覆盖：
-- 当前状态
-- 期望最终状态
-- 设计决策（每个至少 2 个备选方案）
-- 架构约束
-- 风险与缓解
+Output ~200 lines of markdown covering:
+- Current state
+- Desired end state
+- Design decisions (at least 2 alternatives each)
+- Architecture constraints
+- Risks and mitigations
 
 ### S - Structure Outline
 
-类比 C 语言 header 文件：
-- 函数签名（无实现）
-- 类型定义
-- 垂直切片划分
-- 依赖图
+Analogous to C header files:
+- Function signatures (no implementation)
+- Type definitions
+- Vertical slice divisions
+- Dependency graph
 
 ### P - Plan
 
-被 Design 和 Structure 约束的计划：
-- 具体到文件的修改清单
-- 每个修改的风险等级
-- 可执行的测试策略
-- 回滚检查点
+A plan constrained by Design and Structure:
+- File-level change checklist
+- Risk level for each change
+- Executable test strategy
+- Rollback checkpoints
 
 ---
 
-## 项目结构
+## Project Structure
 
 ```
 qrspi-agent/
-├── qrspi/                      # 核心源码包
-│   ├── __init__.py             # 版本信息
-│   ├── workflow.py             # 8 阶段状态机 + SessionConfig + 产物持久化
-│   ├── prompts.py              # Prompt 模板系统（指令预算控制）
-│   ├── engine.py               # 自动化工作流引擎（runner + validator + context）
-│   ├── runner.py               # CLI 运行器（claude / codex / mock）
-│   ├── validators.py           # 阶段产物启发式校验器
-│   ├── context.py              # Context 装配器（按阶段构建最小上下文）
-│   ├── agents.py               # 子 Agent 编排 + Context 防火墙（当前为模拟实现）
-│   ├── parsers.py              # 阶段产物结构化解析器
-│   └── cli.py                  # 命令行接口（所有子命令入口）
-├── scripts/
-│   └── demo.py                 # 无外部依赖的完整工作流演示脚本
+├── packages/
+│   └── qrspi/                  # Node.js/TypeScript core package
+│       ├── src/
+│       │   ├── cli/              # CLI entrypoint and command handling
+│       │   ├── context/          # Context assembler (build minimal context per stage)
+│       │   ├── engine/           # Automated workflow engine
+│       │   ├── parsers/          # Stage artifact structured parser
+│       │   ├── prompts/          # Prompt template system (instruction budget control)
+│       │   ├── runner/           # CLI runner (claude / codex / mock)
+│       │   ├── storage/          # File persistence and path resolution
+│       │   ├── validators/       # Stage artifact heuristic validator
+│       │   ├── workflow/         # Type definitions and stage schemes
+│       │   └── index.ts          # Public API exports
+│       ├── tests/                # Vitest test suite
+│       ├── dist/                 # TypeScript compilation output
+│       ├── package.json          # npm package config
+│       ├── tsconfig.json         # TypeScript config
+│       └── vitest.config.ts      # Test config
 ├── skills/
-│   └── qrspi-cli-workflow/     # 本地 skill，指导 Agent 优先调用 qrspi CLI
-├── tests/                      # pytest 测试套件
-│   ├── test_workflow.py
-│   ├── test_engine.py
-│   ├── test_parsers.py
-│   ├── test_validators.py
-│   └── test_context.py
+│   └── qrspi-cli-workflow/     # Local skill guiding agents to prefer qrspi CLI
 ├── docs/
-│   ├── AUTOMATION_ENGINE_GAP_ANALYSIS.md   # 引擎差距分析
-│   └── EXAMPLE.md              # 完整使用示例（用户认证功能）
-├── pyproject.toml              # PEP 621 项目元数据
-├── setup.py                    # setuptools 兼容配置
-└── README.md                   # 面向人类用户的使用文档
+│   ├── AUTOMATION_ENGINE_GAP_ANALYSIS.md
+│   └── EXAMPLE.md
+├── package.json                # Root workspace config
+├── README.md                   # Human-facing user documentation
+└── AGENTS.md                   # AI Coding Agent project guide
 ```
 
 ---
 
-## 三条核心洞察
+## Three Core Insights
 
-### 洞察一: Context Window 利用率保持在 40% 以下
+### Insight One: Keep Context Window Utilization Below 40%
 
-> 达到 60% 时，开始新会话。这与 context window 有多大无关。
+> At 60%, start a new session. This is independent of how large the context window is.
 
-**实践:** 每个垂直切片后保存进度，启动只加载当前所需内容的新 Session。
+**Practice:** Save progress after each vertical slice, start a new session that loads only what's currently needed.
 
-### 洞察二: 垂直切片优于水平分层
+### Insight Two: Vertical Slices Beat Horizontal Layers
 
-> Mock API → 前端 → 数据库，每个切片后有 checkpoint。
+> Mock API → Frontend → Database, with a checkpoint after each slice.
 
-**实践:** 不是"先完成所有数据库工作，然后所有 API 工作"，而是每个切片都有端到端的可测试路径。
+**Practice:** Instead of "finish all database work first, then all API work", each slice has an end-to-end testable path.
 
-### 洞察三: 子 Agent 作为 Context 防火墙
+### Insight Three: Sub-Agents as Context Firewalls
 
-> 昂贵模型用于编排和决策。更便宜、更快的模型用于范围有限的子任务。
+> Expensive models for orchestration and decision-making. Cheaper, faster models for scoped subtasks.
 
-**实践:** Orchestrator 保持精干，子 Agent 隔离 Context，通过文件系统产物协调。
+**Practice:** Orchestrator stays lean, sub-agents isolate context, coordinate through filesystem artifacts.
 
 ---
 
-## 从 RPI 到 QRSPI 的演进信号
+## Evolution Signals from RPI to QRSPI
 
-> AI 辅助开发的差异化正在从你使用的模型转向你如何配置和约束 Agent。
+> The differentiator in AI-assisted development is shifting from which model you use to how you configure and constrain the agent.
 
-决定 Agent 产出可靠输出还是看起来合理但悄无声息崩溃的代码的变量：
+Variables that determine whether an agent produces reliable output or code that looks reasonable but silently breaks:
 
-- Context 管理
-- 指令预算
-- 子 Agent 架构
-- 确定性钩子
-- 验证管道
+- Context management
+- Instruction budget
+- Sub-agent architecture
+- Deterministic hooks
+- Validation pipeline
 
-**模型是引擎。Harness（挽具）是让它工作的东西。**
+**The model is the engine. The harness is what makes it work.**
 
 ---
 

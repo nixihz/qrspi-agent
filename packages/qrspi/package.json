@@ -1,0 +1,54 @@
+{
+  "name": "qrspi",
+  "version": "1.0.0",
+  "description": "QRSPI CLI - Node.js/TypeScript 版结构化编程 Agent 工作流框架",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "qrspi": "./dist/cli/main.js"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "keywords": [
+    "qrspi",
+    "crispy",
+    "ai-agent",
+    "workflow",
+    "cli",
+    "code-generation"
+  ],
+  "author": "Brian Xie",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@git.xiezhi.xin:2222/iamx/qrspi-agent.git",
+    "directory": "packages/qrspi"
+  },
+  "bugs": {
+    "url": "https://git.xiezhi.xin/iamx/qrspi-agent/issues"
+  },
+  "homepage": "https://git.xiezhi.xin/iamx/qrspi-agent#readme",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

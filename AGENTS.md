@@ -1,274 +1,281 @@
-# AGENTS.md — QRSPI Agent 项目指南
+# AGENTS.md — QRSPI Agent Project Guide
 
-> 本文档面向 AI Coding Agent。如果你对这个项目一无所知，从这里开始。
-
----
-
-## 项目概述
-
-**QRSPI Agent** 是一个结构化编程 Agent 工作流框架，实现从 RPI (Research-Plan-Implement) 到 QRSPI/CRISPY 的可落地方案。
-
-核心目标：解决当前 AI 编程 Agent 在复杂代码库中「计划读起来合理、代码却无法集成」的失败模式。通过 8 阶段工作流、指令预算控制、垂直切片和 Context 管理，让 Agent 产出可靠、可验证、可集成的代码。
-
-项目当前处于 Beta 阶段（v1.0.0）。
+> This document is for AI Coding Agents. If you know nothing about this project, start here.
 
 ---
 
-## 技术栈
+## Project Overview
 
-- **语言**: Python 3.8+
-- **构建工具**: setuptools（`pyproject.toml` + `setup.py` 双配置）
-- **核心依赖**: 无 — 框架本身不绑定任何特定 LLM
-- **开发依赖**: `pytest>=7.0`, `black>=22.0`, `mypy>=0.950`
-- **CLI 入口**: `qrspi`（`qrspi.cli:main`）
-- **运行器依赖**（可选，按需安装）:
-  - `claude` CLI（Claude Code）
-  - `codex` CLI（OpenAI Codex CLI）
+**QRSPI Agent** is a structured programming agent workflow framework that implements a practical path from RPI (Research-Plan-Implement) to QRSPI/CRISPY.
+
+**Core Goal**: Solve the failure mode where AI coding agents produce plans that sound reasonable but generate code that cannot integrate into complex codebases. Through an 8-stage workflow, instruction budget control, vertical slicing, and context management, the agent produces reliable, verifiable, and integrable code.
+
+The project is currently in Beta (v1.0.0).
 
 ---
 
-## 构建与安装
+## Tech Stack
+
+- **Language**: TypeScript / Node.js 20+
+- **Build Tool**: TypeScript compiler (`tsc`)
+- **Core Dependency**: `commander` (CLI framework) — the framework itself does not bind to any specific LLM
+- **Dev Dependencies**: `vitest` (testing), `typescript` (type checking)
+- **CLI Entry**: `qrspi` (`packages/qrspi/dist/cli/main.js`)
+- **Language Support**: Bilingual prompts (English default, Chinese via `--lang zh` or system `LANG` e.g. `zh_CN.UTF-8`)
+- **Runner Dependencies** (optional, install on demand):
+  - `claude` CLI (Claude Code)
+  - `codex` CLI (OpenAI Codex CLI)
+
+---
+
+## Build & Install
 
 ```bash
-# 开发安装（可编辑模式）
-pip install -e .
+# Install dependencies
+npm install
 
-# 安装开发依赖
-pip install -e ".[dev]"
+# Build TypeScript
+cd packages/qrspi && npm run build
 
-# 验证安装
-qrspi --help
+# Verify installation
+node packages/qrspi/dist/cli/main.js --help
 ```
 
 ---
 
-## 测试命令
+## Test Commands
 
 ```bash
-# 运行 pytest（当前项目中尚无测试文件，但 pytest 是标准测试工具）
-pytest
+# Run vitest
+cd packages/qrspi && npm test
 
-# 类型检查
-mypy qrspi/
+# Type checking
+npm run lint
 
-# 代码格式化
-black qrspi/
-
-# 编译检查
-python3 -m compileall qrspi
+# Watch mode for continuous compilation
+npm run dev
 ```
-
-**注意**: 当前仓库没有 `tests/` 目录或测试文件。如果需要添加测试，请遵循 pytest 惯例，在仓库根目录创建 `tests/` 目录。
 
 ---
 
-## 代码组织
+## Code Organization
 
 ```
 qrspi-agent/
-├── qrspi/                      # 核心源码包
-│   ├── __init__.py             # 版本信息（1.0.0）
-│   ├── workflow.py             # 8 阶段状态机 + SessionConfig + 产物持久化
-│   ├── prompts.py              # Prompt 模板系统（指令预算控制）
-│   ├── engine.py               # 自动化工作流引擎（runner + validator + context）
-│   ├── runner.py               # CLI 运行器（claude / codex / mock）
-│   ├── validators.py           # 阶段产物启发式校验器
-│   ├── context.py              # Context 装配器（按阶段构建最小上下文）
-│   ├── agents.py               # 子 Agent 编排 + Context 防火墙（当前为模拟实现）
-│   └── cli.py                  # 命令行接口（所有子命令入口）
-├── scripts/
-│   └── demo.py                 # 无外部依赖的完整工作流演示脚本
-├── skills/qrspi-cli-workflow/  # 本地 skill，指导 Agent 优先调用 qrspi CLI
+├── packages/
+│   └── qrspi/                  # Core source package
+│       ├── src/
+│       │   ├── cli/              # CLI entry and command handling
+│       │   ├── context/          # Context assembler (minimum context per stage)
+│       │   ├── engine/           # Automation workflow engine
+│       │   ├── parsers/          # Stage artifact structured parsers
+│       │   ├── prompts/          # Prompt template system (instruction budget control)
+│       │   ├── runner/           # CLI runners (claude / codex / mock)
+│       │   ├── storage/          # File persistence and path resolution
+│       │   ├── validators/       # Stage artifact heuristic validators
+│       │   ├── workflow/         # Type definitions and stage schemas
+│       │   └── index.ts          # Public API exports
+│       ├── tests/                # Vitest test suites
+│       ├── dist/                 # Compiled output
+│       ├── package.json          # npm package config
+│       ├── tsconfig.json         # TypeScript config
+│       └── vitest.config.ts      # Test config
+├── skills/qrspi-cli-workflow/  # Local skill that guides agents to use qrspi CLI first
 ├── docs/
-│   ├── AUTOMATION_ENGINE_GAP_ANALYSIS.md   # 引擎差距分析（已大部分实现）
-│   └── EXAMPLE.md              # 完整使用示例（用户认证功能）
-├── pyproject.toml              # PEP 621 项目元数据
-├── setup.py                    # setuptools 兼容配置
-└── README.md                   # 面向人类用户的使用文档（中文）
+│   ├── AUTOMATION_ENGINE_GAP_ANALYSIS.md   # Engine gap analysis (mostly implemented)
+│   └── EXAMPLE.md              # Full usage example (user authentication feature)
+├── package.json                # Root workspace config
+├── README.md                   # Human-facing user guide (Chinese)
+└── AGENTS.md                   # This document
 ```
 
 ---
 
-## 核心架构概念
+## Core Architecture Concepts
 
-### 8 阶段工作流
+### 8-Stage Workflow
 
-| 阶段 | 代码 | 名称 | 类型 | 需要人工确认 |
-|------|------|------|------|-------------|
-| Q | `QUESTIONS` | 提问 | 对齐 | 否 |
-| R | `RESEARCH` | 研究 | 对齐 | 否 |
-| D | `DESIGN` | 设计讨论 | 对齐 | **是** |
-| S | `STRUCTURE` | 结构大纲 | 对齐 | **是** |
-| P | `PLAN` | 计划 | 对齐 | 否 |
-| W | `WORK_TREE` | 工作树 | 执行 | 否 |
-| I | `IMPLEMENT` | 实现 | 执行 | 否 |
-| PR | `PULL_REQUEST` | 拉取请求 | 执行 | **是** |
+| Stage | Code | Name | Type | Human Approval Required |
+|-------|------|------|------|------------------------|
+| Q | `QUESTIONS` | Questions | Alignment | No |
+| R | `RESEARCH` | Research | Alignment | No |
+| D | `DESIGN` | Design Discussion | Alignment | **Yes** |
+| S | `STRUCTURE` | Structure Outline | Alignment | **Yes** |
+| P | `PLAN` | Plan | Alignment | No |
+| W | `WORK_TREE` | Work Tree | Execution | No |
+| I | `IMPLEMENT` | Implement | Execution | No |
+| PR | `PULL_REQUEST` | Pull Request | Execution | **Yes** |
 
-阶段定义在 `qrspi/workflow.py` 的 `Stage` 枚举中。Gate 策略在 `qrspi/engine.py` 的 `WorkflowEngine.POLICIES` 中硬编码。
+Stage definitions are in `packages/qrspi/src/workflow/stage-schema.ts`. Gate policies are hardcoded in the `isGateStage()` function in `packages/qrspi/src/engine/engine.ts`.
 
-### 关键数据类
+### Key Data Types
 
-- `SessionConfig`: 工作流会话配置，定义 `feature_id`、`project_root`、`output_dir`（默认 `.qrspi`）
-- `QRSPIWorkflow`: 状态机，管理当前阶段、产物存取、状态持久化（`state.json`）
-- `EngineState`: 引擎运行状态，包含审批记录、尝试次数、历史运行记录（`engine_state.json`）
-- `StageArtifact`: 阶段产物，自动保存为 `artifacts/<STAGE>_<YYYY-MM-DD>.md`
-- `VerticalSlice` / `WorkTree`: 垂直切片定义和执行跟踪
-- `ContextPack` / `ContextBuilder`: 按阶段依赖组装最小上下文
+- `SessionConfig`: Workflow session configuration, defines `featureId`, `projectRoot`, `outputDir` (default `.qrspi`)
+- `WorkflowState`: State machine that manages current stage, artifact storage/retrieval, and state persistence (`state.json`)
+- `EngineState`: Engine runtime state, including approval records, attempt counts, and historical runs (`engine_state.json`)
+- `StageArtifact`: Stage artifact, automatically saved as `artifacts/<STAGE>_<YYYY-MM-DD>.md`
+- `SliceDefinition` / `WorkTree`: Vertical slice definitions and execution tracking
+- `ContextPack` / `ContextBuilder`: Assemble minimum context based on stage dependencies
+- `ParsedArtifact`: Structured parsing result of stage artifacts, saved to `structured/<STAGE>_<YYYY-MM-DD>.json`
 
-### Context 管理原则
+### Context Management Principles
 
-- Context Window 利用率目标: **< 40%**
-- 强制切换 Session 阈值: **60%**
-- 每个阶段只加载前置依赖产物的摘要，不加载完整历史
-- 阶段依赖关系定义在 `qrspi/context.py` 的 `STAGE_DEPENDENCIES`
+- Context window utilization target: **< 40%**
+- Mandatory session switch threshold: **60%**
+- Each stage only loads summaries of prerequisite artifacts, not full history
+- Stage dependency relationships are defined in `STAGE_DEPENDENCIES` in `packages/qrspi/src/context/context-builder.ts`
 
-### Prompt 模板系统
+### Prompt Template System
 
-- 每个阶段有独立的 `PromptTemplate` 子类（`qrspi/prompts.py`）
-- **指令预算**: 每阶段 8-13 条指令，远低于 150 条警戒线
-- **无魔法词**: 默认行为就是正确行为
-- 全局注册表: `qrspi.prompts.registry`
+- Each stage has an independent prompt string (`packages/qrspi/src/prompts/template-registry.ts`)
+- **Instruction budget**: 8-13 instructions per stage, far below the 150-instruction danger line
+- **No magic words**: Default behavior is correct behavior
+- Global registry: `createPromptRegistry()`
 
-### Runner 系统
+### Runner System
 
-- `ClaudeCodeRunner`: 调用本机 `claude` CLI（`-p` 模式）
-- `CodexCliRunner`: 调用本机 `codex exec --full-auto` CLI
-- `MockRunner`: 生成占位输出，用于本地验证状态机
-- 模型解析优先级: 命令行 `--model` > `QRSPI_<RUNNER>_MODEL` 环境变量 > `QRSPI_MODEL` > runner 默认值
-- 默认模型: claude → `kimi-for-coding`, codex → `gpt-5.4`
+- `ClaudeCodeRunner`: Invokes local `claude` CLI (`-p` mode)
+- `CodexCliRunner`: Invokes local `codex exec --full-auto` CLI
+- `MockRunner`: Generates placeholder output for local state machine validation
+- Model resolution priority: CLI `--model` > `QRSPI_<RUNNER>_MODEL` env var > `QRSPI_MODEL` > runner default
+- Default models: claude → `kimi-for-coding`, codex → `gpt-5.4`
 
 ---
 
-## CLI 命令参考
+## CLI Command Reference
 
 ```bash
-qrspi init <feature_id> --root <dir>          # 初始化工作流
-qrspi stage --root <dir>                      # 查看当前阶段
-qrspi prompt <Q/R/D/S/P/W/I/PR> --render     # 获取/渲染阶段 prompt
-qrspi advance --root <dir>                    # 手动推进到下一阶段
-qrspi approve --root <dir>                    # 确认 gate 阶段并继续
-qrspi run --root <dir> --input "需求"         # 自动执行直到 gate 或结束
-qrspi status --root <dir>                     # 查看完整状态
-qrspi slice --add/--list --root <dir>         # 管理垂直切片
-qrspi budget                                  # 查看指令预算报告
-qrspi context --root <dir>                    # 查看当前阶段 Context 策略
+qrspi init <feature_id> --root <dir>          # Initialize workflow
+qrspi stage --root <dir>                      # View current stage
+qrspi prompt <Q/R/D/S/P/W/I/PR> --render     # Get/render stage prompt
+qrspi advance --root <dir>                    # Manually advance to next stage
+qrspi approve --root <dir>                    # Approve gate stage and continue
+qrspi run --root <dir> --input "requirement"  # Auto-run until gate or finish
+qrspi status --root <dir>                     # View full status
+qrspi slice --add/--list --root <dir>         # Manage vertical slices
+qrspi budget                                  # View instruction budget report
+qrspi context --root <dir>                    # View current stage context strategy
+qrspi run --lang zh --input "..."             # Use Chinese prompts (default: en)
 ```
 
 ---
 
-## 开发约定
+## Development Conventions
 
-### 语言与注释
+### Language & Comments
 
-- 项目所有文档、注释、CLI 输出、docstring 均使用**中文**
-- 代码标识符（类名、函数名、变量名）使用英文
-- 修改代码时保持中文注释风格
+- All project documentation, comments, CLI output, and JSDoc use **English**
+- Code identifiers (class names, function names, variable names) use English
+- Maintain English comment style when modifying code
 
-### 代码风格
+### Code Style
 
-- 使用 `black` 进行格式化
-- 使用 `mypy` 进行类型检查（已有类型注解，但未强制通过 mypy）
-- 导入顺序: 标准库 → 第三方库 → 本地模块
-- 使用 `from __future__ import annotations` 支持延迟类型评估（Python 3.8+）
+- Use TypeScript strict mode (`strict: true`)
+- Import order: standard library → third-party → local modules
+- Use `.js` extension for local module imports (ESM requirement)
+- Type definitions are centralized in `src/workflow/types.ts`
 
-### 产物与状态文件
+### Artifacts & State Files
 
-工作流运行时在目标项目下创建 `.qrspi/<feature_id>/` 目录：
+The workflow creates a `.qrspi/<feature_id>/` directory in the target project at runtime:
 
 ```
 .qrspi/<feature_id>/
-├── state.json                  # 工作流状态（当前阶段）
-├── engine_state.json           # 引擎状态（审批、历史、错误）
-├── artifacts/                  # 阶段产物（*.md）
+├── state.json                  # Workflow state (current stage)
+├── engine_state.json           # Engine state (approvals, history, errors)
+├── artifacts/                  # Stage artifacts (*.md)
 │   ├── Q_2026-04-22.md
 │   ├── R_2026-04-22.md
 │   └── ...
-├── runs/                       # 每次运行的完整记录
+├── structured/                 # Structured parsing artifacts (*.json)
+│   ├── Q_2026-04-22.json
+│   └── ...
+├── runs/                       # Full record of each run
 │   └── <STAGE>_<timestamp>_attempt<N>/
 │       ├── prompt.md
 │       ├── context.json
 │       ├── runner_stdout.txt
 │       ├── runner_stderr.txt
 │       ├── runner_meta.json
-│       └── validation.json
-├── slices/                     # 垂直切片定义
+│       ├── validation.json
+│       └── parsed_artifact.json
+├── slices/                     # Vertical slice definitions
 │   └── work_tree.json
-└── sessions/                   # Session 历史（预留）
+└── sessions/                   # Session history (reserved)
 ```
 
-**注意**: Agent 不应直接手工修改 `.qrspi/` 下的状态文件，应通过 `qrspi` CLI 操作。
+**Note**: Agents should not manually modify state files under `.qrspi/`; use the `qrspi` CLI instead.
 
-### 阶段推进规则
+### Stage Advancement Rules
 
-1. `qrspi run` 自动执行当前阶段 → 调用 runner → 保存产物 → 运行 validator
-2. 若 validation 失败，状态标记为 `failed`，停止推进
-3. 若阶段是 Gate（D/S/PR），状态变为 `waiting_approval`，等待 `qrspi approve`
-4. 非 Gate 阶段且校验通过，自动进入下一阶段
-5. `qrspi advance` 只检查产物文件是否存在（不验证内容），建议优先使用 `qrspi run`
-
----
-
-## 测试策略
-
-当前项目缺少自动化测试。如果你要添加测试，建议覆盖以下方面：
-
-1. **状态机测试**: `Stage.next_stage()`, `QRSPIWorkflow.transition_to()`, `advance()`
-2. **Validator 测试**: 每个阶段的 `_validate_x()` 函数对各种输入的判定
-3. **ContextBuilder 测试**: 阶段依赖解析、摘要截断逻辑
-4. **Runner 测试**: MockRunner 的确定性输出，真实 runner 的命令组装
-5. **Engine 测试**: Gate 暂停、审批恢复、失败重试、状态持久化
+1. `qrspi run` auto-executes current stage → invokes runner → saves artifact → runs validator → parses structured data
+2. If validation fails, state is marked `failed` and advancement stops
+3. If the stage is a Gate (D/S/PR), state becomes `waiting_approval` until `qrspi approve`
+4. Non-Gate stages with passed validation automatically advance to the next stage
+5. `qrspi advance` only checks if artifact files exist (does not validate content); prefer `qrspi run`
 
 ---
 
-## 安全注意事项
+## Testing Strategy
 
-1. **Runner 执行安全**:
-   - `ClaudeCodeRunner` 默认使用 `--permission-mode bypassPermissions`，Claude Code 可能会执行任意 shell 命令
-   - `CodexCliRunner` 使用 `--full-auto` 模式，同样具有完全自动执行能力
-   - 在生产环境或敏感代码库中使用时，应审查 runner 参数
+Tests cover the following areas:
 
-2. **Context 隔离**:
-   - `ContextFirewall` 理论上隔离子 Agent 的上下文，但当前 `agents.py` 中的 `SubAgent.execute()` 是模拟实现，未真正调用 LLM
-   - 真实 LLM 调用时应注意不泄露敏感信息（如 `.env`、密钥文件）到 prompt 中
-
-3. **状态文件**:
-   - `.qrspi/` 目录包含工作流历史、产物和 runner 输出，可能包含敏感代码分析结果
-   - 建议将 `.qrspi/` 加入 `.gitignore`
-
-4. **依赖最小化**:
-   - 框架本身零核心依赖，降低了供应链攻击面
-   - 但实际运行依赖外部 CLI 工具（`claude`、`codex`），需确保这些工具来源可信
+1. **State Machine Tests**: `getNextStage()`, `isGateStage()`, `isValidStageCode()`
+2. **Validator Tests**: Validation logic per stage for various inputs
+3. **ContextBuilder Tests**: Stage dependency resolution logic
+4. **Runner Tests**: MockRunner deterministic output, real runner command assembly
+5. **Engine Tests**: Gate pause, approval resume, failure retry, state persistence
+6. **Parser Tests**: Accuracy of parsing stage artifacts into structured data
 
 ---
 
-## 扩展与修改指南
+## Security Notes
 
-### 添加新阶段
+1. **Runner Execution Safety**:
+   - `ClaudeCodeRunner` defaults to `--permission-mode bypassPermissions`; Claude Code may execute arbitrary shell commands
+   - `CodexCliRunner` uses `--full-auto` mode, which also has full auto-execution capability
+   - Review runner parameters when using in production or sensitive codebases
 
-1. 在 `qrspi/workflow.py` 的 `Stage` 枚举中添加新阶段
-2. 在 `qrspi/prompts.py` 中创建对应的 `PromptTemplate` 子类
-3. 在 `qrspi/validators.py` 中添加 `_validate_xxx()` 函数
-4. 在 `qrspi/engine.py` 的 `POLICIES` 中定义是否需要人工确认
-5. 在 `qrspi/context.py` 的 `STAGE_DEPENDENCIES` 中定义前置依赖
+2. **Context Isolation**:
+   - Ensure sensitive information (e.g., `.env`, key files) is not leaked into prompts during real LLM calls
 
-### 添加新 Runner
+3. **State Files**:
+   - The `.qrspi/` directory contains workflow history, artifacts, and runner output, which may include sensitive code analysis
+   - Add `.qrspi/` to `.gitignore`
 
-1. 在 `qrspi/runner.py` 中继承 `BaseRunner` 实现新 runner
-2. 在 `build_runner()` 和 `supported_runner_names()` 中注册
-3. 在 `cli.py` 的 `_add_runner_args()` 中添加相关参数（如有需要）
-
-### 改进 Validator
-
-当前 validator 基于 markdown 结构和正则表达式做启发式校验。如需更严格的校验：
-- 可扩展为同时校验配套的 JSON 结构化输出
-- 可在 `ValidationResult` 中增加 `structured_data` 字段
+4. **Minimal Dependencies**:
+   - The framework has only one core dependency (`commander`), reducing supply chain attack surface
+   - Actual runtime depends on external CLI tools (`claude`, `codex`); ensure these tools are from trusted sources
 
 ---
 
-## 已知限制
+## Extension & Modification Guide
 
-1. `qrspi/agents.py` 中的 `SubAgent.execute()` 当前是模拟实现（`_simulate_execution`），不调用真实 LLM。真实 Agent 编排需要后续接入实际 LLM API 或 CLI。
-2. `WorkTree` 和 `Implement` 阶段的切片级自动执行尚未完整实现 — `I` 阶段目前作为一个整体运行，未按垂直切片拆分独立 Session。
-3. 没有 `tests/` 目录，测试覆盖率为零。
-4. ContextBuilder 的摘要逻辑目前只是截断前 40 行，未做真正的智能摘要。
-5. 项目没有 CI/CD 配置。
+### Adding a New Stage
+
+1. Add the new stage to `STAGE_ORDER` and stage definitions in `packages/qrspi/src/workflow/stage-schema.ts`
+2. Add the corresponding prompt template in `packages/qrspi/src/prompts/template-registry.ts`
+3. Add validation logic for the stage in `packages/qrspi/src/validators/stage-validator.ts`
+4. Define whether human approval is required in `isGateStage()` in `packages/qrspi/src/engine/engine.ts`
+5. Define prerequisites in `STAGE_DEPENDENCIES` in `packages/qrspi/src/context/context-builder.ts`
+6. Add parsing logic for the stage in `packages/qrspi/src/parsers/artifact-parser.ts`
+
+### Adding a New Runner
+
+1. Create a new runner file under `packages/qrspi/src/runner/`, following the `BaseRunner` pattern
+2. Register it in `buildRunner()` and `resolveRunnerName()` in `packages/qrspi/src/runner/index.ts`
+3. Add relevant parameters in `packages/qrspi/src/cli/main.ts` if needed
+
+### Improving the Validator
+
+The current validator uses heuristic checks based on markdown structure and regular expressions. For stricter validation:
+- Extend to also validate accompanying JSON structured output
+- Add a `structured_data` field to `ValidationResult`
+
+---
+
+## Known Limitations
+
+1. Slice-level auto-execution for the `WorkTree` and `Implement` stages is not fully implemented — the `I` stage currently runs as a whole, without splitting into independent sessions per vertical slice.
+2. ContextBuilder's summarization logic currently truncates the first 40 lines only; it does not perform true intelligent summarization.
+3. The project has no CI/CD configuration.

@@ -1,8 +1,11 @@
 # QRSPI 自动化工作流引擎差距分析
 
-> **状态：已解决** — 本文档中识别的大部分差距已通过 `qrspi/engine.py`、`qrspi/runner.py`、
-> `qrspi/validators.py`、`qrspi/context.py` 及 `qrspi run` / `qrspi approve` CLI 命令实现。
-> 保留此文仅供参考，不再代表当前代码状态。
+> **状态：已解决并已迁移到 Node.js/TypeScript** — 本文档中识别的大部分差距已通过
+> `packages/qrspi/src/engine/engine.ts`、`packages/qrspi/src/runner/`、
+> `packages/qrspi/src/validators/stage-validator.ts`、
+> `packages/qrspi/src/context/context-builder.ts` 及 `qrspi run` / `qrspi approve` CLI 命令实现。
+> Python 版本已删除，Node.js/TypeScript 版本为当前唯一维护版本。
+> 保留此文仅供参考，不再代表最新代码状态。
 
 ## 目标
 
@@ -23,9 +26,9 @@
 
 现状：
 
-- [`qrspi/workflow.py`](/opt/case/iamx/qrspi-agent/qrspi/workflow.py) 定义了阶段枚举、状态切换、产物存取。
-- [`qrspi/prompts.py`](/opt/case/iamx/qrspi-agent/qrspi/prompts.py) 定义了每个阶段的 Prompt 模板。
-- [`qrspi/cli.py`](/opt/case/iamx/qrspi-agent/qrspi/cli.py) 主要提供 `prompt`、`advance`、`status` 这类手动命令。
+- [`packages/qrspi/src/workflow/stage-schema.ts`](/opt/case/iamx/qrspi-agent/qrspi/workflow.py) 定义了阶段枚举、状态切换、产物存取。
+- [`packages/qrspi/src/prompts/template-registry.ts`](/opt/case/iamx/qrspi-agent/qrspi/prompts.py) 定义了每个阶段的 Prompt 模板。
+- [`packages/qrspi/src/cli/main.ts`](/opt/case/iamx/qrspi-agent/qrspi/cli.py) 主要提供 `prompt`、`advance`、`status` 这类手动命令。
 
 问题：
 
@@ -41,7 +44,7 @@
 
 现状：
 
-- [`qrspi/agents.py`](/opt/case/iamx/qrspi-agent/qrspi/agents.py) 里虽然有 `SubAgent`、`AgentOrchestrator`、`ContextFirewall`。
+- [（原 Python  agents 模块，Node 版暂未实现）](/opt/case/iamx/qrspi-agent/qrspi/agents.py) 里虽然有 `SubAgent`、`AgentOrchestrator`、`ContextFirewall`。
 - 但 `SubAgent.execute()` 里调用的是 `_simulate_execution()`，不是 Claude Code，也不是任何真实 LLM Runner。
 
 问题：
@@ -93,8 +96,8 @@
 
 现状：
 
-- [`qrspi/workflow.py`](/opt/case/iamx/qrspi-agent/qrspi/workflow.py) 的 `get_context_for_stage()` 只返回一个占位摘要。
-- [`qrspi/agents.py`](/opt/case/iamx/qrspi-agent/qrspi/agents.py) 的 `ContextFirewall.prepare_context()` 只是把输入文件拼起来。
+- [`packages/qrspi/src/workflow/stage-schema.ts`](/opt/case/iamx/qrspi-agent/qrspi/workflow.py) 的 `get_context_for_stage()` 只返回一个占位摘要。
+- [（原 Python  agents 模块，Node 版暂未实现）](/opt/case/iamx/qrspi-agent/qrspi/agents.py) 的 `ContextFirewall.prepare_context()` 只是把输入文件拼起来。
 
 问题：
 
@@ -176,7 +179,7 @@
 
 建议新增模块：
 
-- `qrspi/runner.py`
+- `packages/qrspi/src/runner/`
 - `ClaudeCodeRunner.run_stage(stage_run: StageRun) -> RunnerResult`
 
 它应该负责：
@@ -197,8 +200,8 @@
 
 建议新增模块：
 
-- `qrspi/parsers.py`
-- `qrspi/validators.py`
+- `packages/qrspi/src/parsers/artifact-parser.ts`
+- `packages/qrspi/src/validators/stage-validator.ts`
 
 建议输出结构：
 
@@ -229,7 +232,7 @@ class ParsedArtifact:
 
 建议新增模块：
 
-- `qrspi/context.py`
+- `packages/qrspi/src/context/context-builder.ts`
 
 建议上下文分层：
 
@@ -368,11 +371,11 @@ start_run
 
 建议先补以下文件：
 
-- `qrspi/engine.py`
-- `qrspi/runner.py`
-- `qrspi/parsers.py`
-- `qrspi/validators.py`
-- `qrspi/context.py`
+- `packages/qrspi/src/engine/engine.ts`
+- `packages/qrspi/src/runner/`
+- `packages/qrspi/src/parsers/artifact-parser.ts`
+- `packages/qrspi/src/validators/stage-validator.ts`
+- `packages/qrspi/src/context/context-builder.ts`
 
 先不要急着做复杂并行，先把单条主链跑通：
 
