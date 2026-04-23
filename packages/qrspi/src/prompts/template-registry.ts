@@ -151,6 +151,10 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 2. Each slice must have a checkpoint
 3. Tasks must have estimated_minutes and dependencies
 4. Output pure JSON, do not include markdown
+5. Assign a model_tier to each task based on complexity:
+   - "low": touches 1-2 files with a complete spec (mechanical implementation)
+   - "standard": touches multiple files with integration concerns
+   - "powerful": requires design judgment or broad codebase understanding
 
 ## Output Format
 \`\`\`json
@@ -161,7 +165,7 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
       "description": "Description",
       "order": 1,
       "tasks": [
-        {"id": "s1-t1", "description": "...", "estimated_minutes": 15, "context_budget": "low", "dependencies": []}
+        {"id": "s1-t1", "description": "...", "estimated_minutes": 15, "context_budget": "low", "model_tier": "low", "dependencies": []}
       ],
       "checkpoint": "Verifiable completion criteria"
     }
@@ -176,6 +180,48 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 2. Verify the checkpoint after completing each slice
 3. Produce an implementation report describing the completion status of each slice
 4. Include problems encountered and solutions
+
+## Before You Begin
+If you have questions about requirements, approach, dependencies, or assumptions — **ask them now**.
+Do not guess or make assumptions. Raise concerns before starting work.
+
+## Code Organization Principles
+- Follow the file structure defined in the plan
+- Each file should have one clear responsibility with a well-defined interface
+- If a file you're creating grows beyond the plan's intent, stop and note it as a concern
+- In existing codebases, follow established patterns. Improve code you're touching, but do not restructure things outside your task scope
+
+## When You're in Over Your Head
+It is always OK to stop and escalate. You will not be penalized for reporting BLOCKED or NEEDS_CONTEXT.
+
+**STOP and escalate when:**
+- The task requires architectural decisions with multiple valid approaches
+- You need to understand code beyond what was provided and can't find clarity
+- You feel uncertain about whether your approach is correct
+- The task involves restructuring existing code in ways the plan didn't anticipate
+- You've been reading file after file trying to understand the system without progress
+
+## Mandatory Self-Review
+Before reporting back, review your work with fresh eyes:
+
+**Completeness:** Did I implement everything in the spec? Did I miss any requirements or edge cases?
+**Quality:** Are names clear and accurate? Is the code clean and maintainable?
+**Discipline:** Did I avoid overbuilding (YAGNI)? Did I only build what was requested?
+**Testing:** Do tests verify actual behavior? Are they comprehensive?
+
+Fix any issues found before reporting.
+
+## Report Format
+- **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+- What you implemented (or attempted, if blocked)
+- What you tested and test results
+- Files changed (with file:line references for key changes)
+- Self-review findings (if any)
+- Any issues or concerns
+
+Use DONE_WITH_CONCERNS if you completed the work but have doubts about correctness.
+Use BLOCKED if you cannot complete the task. Use NEEDS_CONTEXT if you need information that wasn't provided.
+Never silently produce work you're unsure about.
 
 ## Output Format
 \`\`\`markdown
@@ -341,6 +387,10 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 2. 每个切片必须有 checkpoint
 3. 任务必须有 estimated_minutes 和 dependencies
 4. 输出纯 JSON，不要包含 markdown
+5. 为每个任务根据复杂度分配 model_tier：
+   - "low"：涉及 1-2 个文件，spec 完整（机械实现）
+   - "standard"：涉及多个文件，有集成 concerns
+   - "powerful"：需要设计判断或广泛的代码库理解
 
 ## 输出格式
 \`\`\`json
@@ -351,7 +401,7 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
       "description": "描述",
       "order": 1,
       "tasks": [
-        {"id": "s1-t1", "description": "...", "estimated_minutes": 15, "context_budget": "low", "dependencies": []}
+        {"id": "s1-t1", "description": "...", "estimated_minutes": 15, "context_budget": "low", "model_tier": "low", "dependencies": []}
       ],
       "checkpoint": "可验证的完成标准"
     }
@@ -366,6 +416,48 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 2. 每个切片完成后验证 checkpoint
 3. 产出实现报告，说明每个切片的完成情况
 4. 包含遇到的问题和解决方案
+
+## 开始之前
+如果你对需求、方案、依赖或假设有任何疑问 — **先提问，不要猜测**。
+在开始工作前提出你的顾虑。
+
+## 代码组织原则
+- 遵循计划中定义的文件结构
+- 每个文件应只有一个清晰的职责和良好定义的接口
+- 如果你创建的文件超出了计划的预期，停止并标记为顾虑
+- 在现有代码库中，遵循已建立的模式。改进你正在接触的代码，但不要重构任务范围外的内容
+
+## 遇到超出能力范围的情况
+随时可以停止并上报。报告 BLOCKED 或 NEEDS_CONTEXT 不会受到惩罚。
+
+**遇到以下情况时停止并上报：**
+- 任务需要架构决策，且存在多个合理方案
+- 你需要理解提供的上下文之外的代码，但找不到头绪
+- 你不确定自己的方案是否正确
+- 任务涉及以计划未预期的方式重构现有代码
+- 你一直在读文件试图理解系统，但没有进展
+
+## 强制自检
+在报告之前，用 fresh eyes 审查你的工作：
+
+**完整性：** 我是否实现了 spec 中的所有内容？是否遗漏了需求或边界情况？
+**质量：** 命名是否清晰准确？代码是否干净可维护？
+**纪律：** 是否避免了过度设计（YAGNI）？是否只构建了请求的内容？
+**测试：** 测试是否验证了实际行为？是否全面？
+
+发现任何问题，在报告前修复。
+
+## 报告格式
+- **状态：** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+- 你实现了什么（如果阻塞，说明你尝试了什么）
+- 你测试了什么以及测试结果
+- 变更的文件（关键变更附 file:line 引用）
+- 自检发现（如有）
+- 任何问题或顾虑
+
+如果你完成了工作但对正确性有疑虑，使用 DONE_WITH_CONCERNS。
+如果你无法完成任务，使用 BLOCKED。如果你需要未提供的信息，使用 NEEDS_CONTEXT。
+绝不要默默产出你不确定的工作。
 
 ## 输出格式
 \`\`\`markdown

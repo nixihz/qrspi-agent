@@ -82,6 +82,118 @@ alternative B
     expect(result.valid).toBe(false);
   });
 
+  it("validates W stage - warns on missing model_tier", () => {
+    const content = JSON.stringify({
+      slices: [
+        {
+          name: "slice1",
+          description: "desc",
+          order: 1,
+          tasks: [{ id: "t1", description: "task", estimated_minutes: 10, context_budget: "low", dependencies: [] }],
+          checkpoint: "ok",
+        },
+      ],
+    });
+    const result = validateStageArtifact("W", content);
+    expect(result.valid).toBe(true);
+    expect(result.issues.some((i) => i.severity === "warning" && i.message.includes("model_tier"))).toBe(true);
+  });
+
+  it("validates W stage - warns on invalid model_tier", () => {
+    const content = JSON.stringify({
+      slices: [
+        {
+          name: "slice1",
+          description: "desc",
+          order: 1,
+          tasks: [{ id: "t1", description: "task", estimated_minutes: 10, context_budget: "low", model_tier: "fast", dependencies: [] }],
+          checkpoint: "ok",
+        },
+      ],
+    });
+    const result = validateStageArtifact("W", content);
+    expect(result.valid).toBe(true);
+    expect(result.issues.some((i) => i.severity === "warning" && i.message.includes("invalid model_tier"))).toBe(true);
+  });
+
+  it("validates W stage - accepts valid model_tier values", () => {
+    const content = JSON.stringify({
+      slices: [
+        {
+          name: "slice1",
+          description: "desc",
+          order: 1,
+          tasks: [
+            { id: "t1", description: "task1", estimated_minutes: 10, context_budget: "low", model_tier: "low", dependencies: [] },
+            { id: "t2", description: "task2", estimated_minutes: 20, context_budget: "medium", model_tier: "standard", dependencies: ["t1"] },
+            { id: "t3", description: "task3", estimated_minutes: 30, context_budget: "high", model_tier: "powerful", dependencies: ["t2"] },
+          ],
+          checkpoint: "ok",
+        },
+      ],
+    });
+    const result = validateStageArtifact("W", content);
+    expect(result.valid).toBe(true);
+    expect(result.issues.filter((i) => i.message.includes("model_tier"))).toHaveLength(0);
+  });
+
+  it("validates I stage - basic content passes with warnings", () => {
+    const result = validateStageArtifact("I", makeLines(10));
+    expect(result.valid).toBe(true);
+    expect(result.issues.some((i) => i.severity === "warning")).toBe(true);
+  });
+
+  it("validates I stage - missing self-review triggers warning", () => {
+    const content = makeLines(10);
+    const result = validateStageArtifact("I", content);
+    expect(result.issues.some((i) => i.message.includes("self-review"))).toBe(true);
+  });
+
+  it("validates I stage - missing status report triggers warning", () => {
+    const content = makeLines(10);
+    const result = validateStageArtifact("I", content);
+    expect(result.issues.some((i) => i.message.includes("status report"))).toBe(true);
+  });
+
+  it("validates I stage - missing files changed triggers warning", () => {
+    const content = makeLines(10);
+    const result = validateStageArtifact("I", content);
+    expect(result.issues.some((i) => i.message.includes("files changed"))).toBe(true);
+  });
+
+  it("validates I stage - complete content passes without warnings", () => {
+    const content = `
+# Implementation Report
+
+## Slice 1: Auth
+### Implementation Content
+Added login flow
+
+### Verification Result
+Tests pass
+
+### Remaining Issues
+None
+
+## Self-Review
+- Completeness: all done
+- Quality: clean
+
+## Status: DONE
+
+## Files Changed
+- src/auth.ts
+- tests/auth.test.ts
+`;
+    const result = validateStageArtifact("I", content);
+    expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(0);
+  });
+
+  it("validates PR stage", () => {
+    expect(validateStageArtifact("PR", makeLines(10)).valid).toBe(true);
+  });
+
   it("creates validators for all stages", () => {
     const validators = createStageValidators();
     const stages: StageCode[] = ["Q", "R", "D", "S", "P", "W", "I", "PR"];
@@ -89,10 +201,5 @@ alternative B
       expect(validators[stage]).toBeDefined();
       expect(validators[stage].stage).toBe(stage);
     }
-  });
-
-  it("validates I and PR stages", () => {
-    expect(validateStageArtifact("I", makeLines(10)).valid).toBe(true);
-    expect(validateStageArtifact("PR", makeLines(10)).valid).toBe(true);
   });
 });

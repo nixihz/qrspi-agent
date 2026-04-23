@@ -438,6 +438,13 @@ qrspi-agent/
 
 ---
 
+## 致谢
+
+本项目受到以下项目的启发：
+
+- **[obra/superpowers](https://github.com/obra/superpowers)** — Subagent-driven development skill 和 "Do Not Trust the Report" 审查理念
+- **[humanlayer](https://github.com/humanlayer)** — AI Agent 的人机协作层（Human-in-the-loop）编排
+
 ## License
 
 MIT

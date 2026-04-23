@@ -131,6 +131,12 @@ Stage definitions are in `packages/qrspi/src/workflow/stage-schema.ts`. Gate pol
 - **Instruction budget**: 8-13 instructions per stage, far below the 150-instruction danger line
 - **No magic words**: Default behavior is correct behavior
 - Global registry: `createPromptRegistry()`
+- **I (Implement) stage prompt** includes:
+  - Mandatory self-review protocol (completeness, quality, discipline, testing)
+  - Escalation protocol (`BLOCKED` / `NEEDS_CONTEXT`) for when the agent is stuck
+  - Status report format: `DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT`
+  - Code organization principles (single responsibility per file, follow existing patterns)
+- **W (WorkTree) stage prompt** includes `model_tier` per task (`low` / `standard` / `powerful`) to guide model selection based on complexity
 
 ### Runner System
 
@@ -269,14 +275,16 @@ Tests cover the following areas:
 
 ### Improving the Validator
 
-The current validator uses heuristic checks based on markdown structure and regular expressions. For stricter validation:
-- Extend to also validate accompanying JSON structured output
-- Add a `structured_data` field to `ValidationResult`
+The validator uses heuristic checks based on markdown structure and regular expressions, plus JSON schema checks for structured stages:
+- **I stage**: Checks for self-review, status report (`DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT`), and files changed list
+- **W stage**: Validates JSON structure and checks `model_tier` values (`low` / `standard` / `powerful`)
+- For stricter validation: extend to also validate accompanying JSON structured output, and add a `structured_data` field to `ValidationResult`
 
 ---
 
 ## Known Limitations
 
-1. Slice-level auto-execution for the `WorkTree` and `Implement` stages is not fully implemented — the `I` stage currently runs as a whole, without splitting into independent sessions per vertical slice.
+1. Slice-level auto-execution for the `WorkTree` and `Implement` stages is not fully implemented — the `I` stage currently runs as a whole, without splitting into independent sessions per vertical slice. The prompt now includes self-review and escalation protocols, but per-slice subagent dispatch is not yet implemented.
 2. ContextBuilder's summarization logic currently truncates the first 40 lines only; it does not perform true intelligent summarization.
 3. The project has no CI/CD configuration.
+4. `model_tier` is captured in the WorkTree but not yet consumed by the runner system for automatic model selection.

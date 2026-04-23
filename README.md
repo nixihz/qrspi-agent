@@ -438,6 +438,13 @@ Variables that determine whether an agent produces reliable output or code that 
 
 ---
 
+## Acknowledgments
+
+Inspired by:
+
+- **[obra/superpowers](https://github.com/obra/superpowers)** — Subagent-driven development skill and the "Do Not Trust the Report" review philosophy
+- **[humanlayer](https://github.com/humanlayer)** — Human-in-the-loop orchestration for AI agents
+
 ## License
 
 MIT

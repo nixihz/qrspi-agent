@@ -119,6 +119,30 @@ function validateW(content: string): ValidationResult {
     (parsed as { slices: unknown[] }).slices.length === 0
   ) {
     issues.push({ severity: "error", message: "W stage JSON must contain at least one slice" });
+    return makeResult("W", issues);
+  }
+
+  const slices = (parsed as { slices: Array<unknown> }).slices;
+  const validTiers = new Set(["low", "standard", "powerful"]);
+
+  for (const slice of slices) {
+    if (typeof slice !== "object" || slice === null) continue;
+    const tasks = (slice as { tasks?: unknown[] }).tasks ?? [];
+    for (const task of tasks) {
+      if (typeof task !== "object" || task === null) continue;
+      const taskObj = task as { model_tier?: unknown };
+      if (!("model_tier" in taskObj)) {
+        issues.push({
+          severity: "warning",
+          message: `Task missing model_tier field (expected one of: low, standard, powerful)`,
+        });
+      } else if (typeof taskObj.model_tier !== "string" || !validTiers.has(taskObj.model_tier)) {
+        issues.push({
+          severity: "warning",
+          message: `Task has invalid model_tier "${taskObj.model_tier}" (expected one of: low, standard, powerful)`,
+        });
+      }
+    }
   }
 
   return makeResult("W", issues);
@@ -128,6 +152,41 @@ function validateI(content: string): ValidationResult {
   const issues: ValidationIssue[] = [];
   const lenIssue = checkMinLength(content, 5, "I");
   if (lenIssue) issues.push(lenIssue);
+
+  const lower = content.toLowerCase();
+  const hasSelfReview =
+    lower.includes("self-review") ||
+    lower.includes("self review") ||
+    content.includes("自检") ||
+    content.includes("自查");
+  if (!hasSelfReview) {
+    issues.push({ severity: "warning", message: "Missing self-review section" });
+  }
+
+  const hasStatusReport =
+    lower.includes("done") ||
+    lower.includes("blocked") ||
+    lower.includes("needs_context") ||
+    lower.includes("needs context") ||
+    lower.includes("done_with_concerns") ||
+    lower.includes("done with concerns") ||
+    content.includes("状态") ||
+    content.includes("BLOCKED") ||
+    content.includes("NEEDS_CONTEXT") ||
+    content.includes("DONE_WITH_CONCERNS");
+  if (!hasStatusReport) {
+    issues.push({ severity: "warning", message: "Missing status report (DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT)" });
+  }
+
+  const hasFilesChanged =
+    lower.includes("files changed") ||
+    lower.includes("files:") ||
+    content.includes("变更文件") ||
+    content.includes("文件变更");
+  if (!hasFilesChanged) {
+    issues.push({ severity: "warning", message: "Missing files changed list" });
+  }
+
   return makeResult("I", issues);
 }
 
