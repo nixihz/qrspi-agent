@@ -1,7 +1,7 @@
 {
   "name": "qrspi-agent",
   "version": "1.0.0",
-  "description": "QRSPI Agent - 结构化编程 Agent 工作流框架",
+  "description": "QRSPI Agent — structured programming agent workflow framework",
   "private": true,
   "workspaces": [
     "packages/*"

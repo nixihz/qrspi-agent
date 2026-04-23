@@ -91,20 +91,15 @@ Work Tree → I → PR
 ### 安装
 
 ```bash
-git clone <repository>
-cd qrspi-agent
-npm install
-cd packages/qrspi && npm run build
+# 安装 CLI
+npm install -g qrspi-agent
+qrspi --help
 ```
 
-CLI 入口：
+可选：如果你的 Agent 环境支持 `skills add`，再安装本仓库附带的本地 skill。
 
 ```bash
-# 通过 npx 直接使用
-npx qrspi --help
-
-# 或本地构建后
-node packages/qrspi/dist/cli/main.js --help
+npx skills add https://github.com/nixihz/qrspi-agent.git --skill qrspi-cli-workflow
 ```
 
 ### 内置 Skill
@@ -113,20 +108,9 @@ node packages/qrspi/dist/cli/main.js --help
 
 - `skills/qrspi-cli-workflow`
 
-它是一个工具型 skill，用于指导 agent 优先调用当前项目的 `qrspi` CLI，而不是手工模拟工作流。适合初始化 feature、查看状态、渲染阶段 prompt、推进阶段、审批 gate、管理切片以及驱动 `run` 自动执行。
+用于引导 agent 优先使用 `qrspi` CLI，而不是手工模拟工作流（init、状态、prompt、gate、切片、`run` 等）。
 
-可通过下面的方式把 skill 安装到支持的 agent：
-
-```bash
-npx skills add https://github.com/nixihz/qrspi-agent.git --skill qrspi-cli-workflow
-```
-
-安装 skill 不会自动安装 CLI 二进制。如果机器上没有 `qrspi`，还需要单独安装 npm 包：
-
-```bash
-npm install -g qrspi-agent
-qrspi --help
-```
+安装 skill 不等于安装 `qrspi` CLI。如果本机还没有 `qrspi` 命令，需要先安装 npm 包，或者改用 `npx qrspi-agent`。
 
 ### 1. 初始化工作流
 
@@ -135,16 +119,10 @@ cd your-project
 qrspi init user-authentication --root .
 ```
 
-输出:
+示例输出:
 ```
-✅ QRSPI 工作流已初始化
-   Feature: user-authentication
-   Project: /path/to/your-project
-   Output:  /path/to/your-project/.qrspi/user-authentication
-
-   当前阶段: Q - Questions (提问)
-
-   下一步: qrspi prompt Q --render
+[QRSPI] Initialized workflow: user-authentication
+[QRSPI] Current stage: Questions
 ```
 
 ### 2. 获取阶段 Prompt
@@ -178,8 +156,8 @@ qrspi run --input "添加用户认证功能，支持邮箱+密码和 OAuth"
 # 默认模型: gpt-5.4
 qrspi run --runner codex --input "添加用户认证功能，支持邮箱+密码和 OAuth"
 
-# 如果担心 Claude 长时间无响应，可以设置超时（秒）
-qrspi run --input "添加用户认证功能" --timeout 180
+# 如果担心 Claude 长时间无响应，可以设置超时（毫秒）
+qrspi run --input "添加用户认证功能" --timeout 180000
 
 # 也可以显式指定模型
 qrspi run --input "添加用户认证功能" --model kimi-for-coding
@@ -214,20 +192,27 @@ QRSPI Workflows
 qrspi status
 ```
 
-输出:
+示例输出:
 ```
+[QRSPI] Workflow: Questions (Feature: user-authentication)
+
 ============================================================
-QRSPI 工作流状态
+QRSPI Workflow Status
 ============================================================
->>>    Q: Questions (提问) [对齐]
-       R: Research (研究) [对齐]
-       D: Design Discussion (设计讨论) [对齐]
-       S: Structure Outline (结构大纲) [对齐]
-       P: Plan (计划) [对齐]
-       W: Work Tree (工作树) [执行]
-       I: Implement (实现) [执行]
-       PR: Pull Request (拉取请求) [执行]
+>>>   Q: Questions [Alignment]
+      R: Research [Alignment]
+      D: Design Discussion [Alignment]
+      S: Structure Outline [Alignment]
+      P: Plan [Alignment]
+      W: Work Tree [Execution]
+      I: Implement [Execution]
+      PR: Pull Request [Execution]
 ============================================================
+[QRSPI] Workflow: Questions (Feature: user-authentication)
+
+Engine Status: ready
+Runner: claude
+Model: kimi-for-coding
 ```
 
 ---
@@ -253,12 +238,12 @@ qrspi budget
 
 ```bash
 # 添加垂直切片
-qrspi slice --add "mock-api" --desc "创建 Mock API 端点" --order 1 --checkpoint "curl 测试通过"
-qrspi slice --add "frontend-ui" --desc "实现登录 UI" --order 2 --checkpoint "页面可交互"
-qrspi slice --add "database" --desc "添加用户表和迁移" --order 3 --checkpoint "单元测试通过"
+qrspi slice add "mock-api" --desc "创建 Mock API 端点" --order 1 --checkpoint "curl 测试通过"
+qrspi slice add "frontend-ui" --desc "实现登录 UI" --order 2 --checkpoint "页面可交互"
+qrspi slice add "database" --desc "添加用户表和迁移" --order 3 --checkpoint "单元测试通过"
 
 # 查看切片
-qrspi slice --list
+qrspi slice list
 ```
 
 **为什么垂直切片更好:**
@@ -298,13 +283,13 @@ qrspi slice --list
 
 ### 语言配置
 
-QRSPI 支持中英文双语 prompt，默认英文。
+QRSPI 支持中英文双语 prompt 渲染，默认英文。
 
 ```bash
-# 使用中文 prompt 和 CLI 输出
+# 使用中文 prompt
 qrspi run --input "添加用户认证" --lang zh
 
-# 或依赖系统 LANG 自动识别（如 zh_CN.UTF-8 -> 中文，en_US.UTF-8 -> 英文）
+# 或依赖系统 LANG 自动识别 prompt 语言（如 zh_CN.UTF-8 -> 中文，en_US.UTF-8 -> 英文）
 export LANG=zh_CN.UTF-8
 qrspi run --input "添加用户认证"
 ```
@@ -403,9 +388,6 @@ qrspi-agent/
 │       └── vitest.config.ts      # 测试配置
 ├── skills/
 │   └── qrspi-cli-workflow/     # 本地 skill，指导 Agent 优先调用 qrspi CLI
-├── docs/
-│   ├── AUTOMATION_ENGINE_GAP_ANALYSIS.md
-│   └── EXAMPLE.md
 ├── package.json                # 根目录 workspace 配置
 ├── README.md                   # 面向人类用户的使用文档
 └── AGENTS.md                   # 面向 AI Coding Agent 的项目指南

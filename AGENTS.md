@@ -82,8 +82,7 @@ qrspi-agent/
 │       └── vitest.config.ts      # Test config
 ├── skills/qrspi-cli-workflow/  # Local skill that guides agents to use qrspi CLI first
 ├── docs/
-│   ├── AUTOMATION_ENGINE_GAP_ANALYSIS.md   # Engine gap analysis (mostly implemented)
-│   └── EXAMPLE.md              # Full usage example (user authentication feature)
+│   └── README.zh.md            # Chinese guide
 ├── package.json                # Root workspace config
 ├── README.md                   # Human-facing user guide (Chinese)
 └── AGENTS.md                   # This document

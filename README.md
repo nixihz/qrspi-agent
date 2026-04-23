@@ -91,20 +91,15 @@ Work Tree → I → PR
 ### Installation
 
 ```bash
-git clone <repository>
-cd qrspi-agent
-npm install
-cd packages/qrspi && npm run build
+# Install the CLI
+npm install -g qrspi-agent
+qrspi --help
 ```
 
-CLI entrypoint:
+Optional: install the local skill for agents that support `skills add`.
 
 ```bash
-# Use directly via npx
-npx qrspi --help
-
-# Or after local build
-node packages/qrspi/dist/cli/main.js --help
+npx skills add https://github.com/nixihz/qrspi-agent.git --skill qrspi-cli-workflow
 ```
 
 ### Built-in Skill
@@ -113,20 +108,9 @@ This repository includes a local skill:
 
 - `skills/qrspi-cli-workflow`
 
-It is a utility skill that guides agents to prefer calling the project's `qrspi` CLI rather than manually simulating the workflow. Suitable for initializing features, checking status, rendering stage prompts, advancing stages, approving gates, managing slices, and driving automated execution via `run`.
+It guides agents to prefer the `qrspi` CLI over manually simulating the workflow (init, status, prompts, gates, slices, `run`, etc.).
 
-Install the skill into a supported agent with:
-
-```bash
-npx skills add https://github.com/nixihz/qrspi-agent.git --skill qrspi-cli-workflow
-```
-
-Installing the skill does not install the CLI binary. If `qrspi` is not available, install the npm package separately:
-
-```bash
-npm install -g qrspi-agent
-qrspi --help
-```
+Installing the skill does not install the `qrspi` CLI. If `qrspi` is not on your `PATH`, install the npm package first or use `npx qrspi-agent`.
 
 ### 1. Initialize Workflow
 
@@ -135,16 +119,10 @@ cd your-project
 qrspi init user-authentication --root .
 ```
 
-Output:
+Example output:
 ```
-✅ QRSPI workflow initialized
-   Feature: user-authentication
-   Project: /path/to/your-project
-   Output:  /path/to/your-project/.qrspi/user-authentication
-
-   Current stage: Q - Questions
-
-   Next step: qrspi prompt Q --render
+[QRSPI] Initialized workflow: user-authentication
+[QRSPI] Current stage: Questions
 ```
 
 ### 2. Get Stage Prompt
@@ -178,8 +156,8 @@ qrspi run --input "Add user authentication with email+password and OAuth"
 # Default model: gpt-5.4
 qrspi run --runner codex --input "Add user authentication with email+password and OAuth"
 
-# If concerned about Claude hanging, set timeout (seconds)
-qrspi run --input "Add user authentication" --timeout 180
+# If concerned about Claude hanging, set timeout (milliseconds)
+qrspi run --input "Add user authentication" --timeout 180000
 
 # Or explicitly specify model
 qrspi run --input "Add user authentication" --model kimi-for-coding
@@ -214,20 +192,27 @@ QRSPI Workflows
 qrspi status
 ```
 
-Output:
+Example output:
 ```
+[QRSPI] Workflow: Questions (Feature: user-authentication)
+
 ============================================================
 QRSPI Workflow Status
 ============================================================
->>>    Q: Questions [Alignment]
-       R: Research [Alignment]
-       D: Design Discussion [Alignment]
-       S: Structure Outline [Alignment]
-       P: Plan [Alignment]
-       W: Work Tree [Execution]
-       I: Implement [Execution]
-       PR: Pull Request [Execution]
+>>>   Q: Questions [Alignment]
+      R: Research [Alignment]
+      D: Design Discussion [Alignment]
+      S: Structure Outline [Alignment]
+      P: Plan [Alignment]
+      W: Work Tree [Execution]
+      I: Implement [Execution]
+      PR: Pull Request [Execution]
 ============================================================
+[QRSPI] Workflow: Questions (Feature: user-authentication)
+
+Engine Status: ready
+Runner: claude
+Model: kimi-for-coding
 ```
 
 ---
@@ -253,12 +238,12 @@ qrspi budget
 
 ```bash
 # Add vertical slices
-qrspi slice --add "mock-api" --desc "Create Mock API endpoints" --order 1 --checkpoint "curl test passes"
-qrspi slice --add "frontend-ui" --desc "Implement login UI" --order 2 --checkpoint "Page is interactive"
-qrspi slice --add "database" --desc "Add user table and migration" --order 3 --checkpoint "Unit tests pass"
+qrspi slice add "mock-api" --desc "Create Mock API endpoints" --order 1 --checkpoint "curl test passes"
+qrspi slice add "frontend-ui" --desc "Implement login UI" --order 2 --checkpoint "Page is interactive"
+qrspi slice add "database" --desc "Add user table and migration" --order 3 --checkpoint "Unit tests pass"
 
 # List slices
-qrspi slice --list
+qrspi slice list
 ```
 
 **Why vertical slices are better:**
@@ -298,13 +283,13 @@ Default models:
 
 ### Language Configuration
 
-QRSPI supports bilingual prompts (English and Chinese). Default is English.
+QRSPI supports bilingual prompt rendering (English and Chinese). Default is English.
 
 ```bash
-# Use Chinese prompts and CLI output
+# Use Chinese prompts
 qrspi run --input "Add user authentication" --lang zh
 
-# Or rely on system LANG (e.g. zh_CN.UTF-8 -> Chinese, en_US.UTF-8 -> English)
+# Or rely on system LANG for prompt rendering (e.g. zh_CN.UTF-8 -> Chinese, en_US.UTF-8 -> English)
 export LANG=zh_CN.UTF-8
 qrspi run --input "Add user authentication"
 ```
@@ -404,8 +389,7 @@ qrspi-agent/
 ├── skills/
 │   └── qrspi-cli-workflow/     # Local skill guiding agents to prefer qrspi CLI
 ├── docs/
-│   ├── AUTOMATION_ENGINE_GAP_ANALYSIS.md
-│   └── EXAMPLE.md
+│   └── README.zh.md            # Chinese guide
 ├── package.json                # Root workspace config
 ├── README.md                   # Human-facing user documentation
 └── AGENTS.md                   # AI Coding Agent project guide
