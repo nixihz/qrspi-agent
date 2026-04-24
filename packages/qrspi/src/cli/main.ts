@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { createRequire } from "module";
 import { resolve, join } from "path";
+import { realpathSync } from "fs";
 import { fileURLToPath } from "url";
 
 import type {
@@ -622,7 +623,7 @@ export async function main(argv?: string[]): Promise<number> {
 }
 
 const isDirectExecution = process.argv[1]
-  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  ? realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url))
   : false;
 
 if (isDirectExecution) {

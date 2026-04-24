@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1 (2026-04-24)
+
+- Fix CLI entry point not executing when run through symlinks (e.g., Volta, npm global bins).
+
 ## 1.1.0 (2026-04-24)
 
 - Bump version to v1.1.0.
