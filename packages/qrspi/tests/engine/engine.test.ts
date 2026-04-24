@@ -8,6 +8,8 @@ import {
   runSingleStage,
   runWorkflow,
   approveCurrentStage,
+  rejectCurrentStage,
+  rewindWorkflowStage,
   advanceWorkflowStage,
 } from "../../src/engine/engine.js";
 import { writeWorkflowState, writeEngineState } from "../../src/storage/file-repository.js";
@@ -119,6 +121,118 @@ describe("engine", () => {
   it("approveCurrentStage throws for non-gate stage", async () => {
     await initWorkflow(config);
     await expect(approveCurrentStage(config, "Q")).rejects.toThrow("not a gate");
+  });
+
+  it("rejectCurrentStage makes a gate stage ready to rerun", async () => {
+    await initWorkflow(config);
+
+    const wf = {
+      featureId: "test-feature",
+      currentStage: "D" as const,
+      status: "waiting_approval" as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const eng = {
+      featureId: "test-feature",
+      currentStage: "D" as const,
+      status: "waiting_approval" as const,
+      approvals: [],
+      stage_attempts: { Q: 1, R: 1, D: 1 },
+      history: [
+        {
+          stage: "Q" as const,
+          attempt: 1,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          runDir: "q-run",
+          success: true,
+        },
+        {
+          stage: "D" as const,
+          attempt: 1,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          runDir: "d-run",
+          success: true,
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+
+    const result = await rejectCurrentStage(config, "D", "Needs a clearer design");
+    expect(result.workflowState.currentStage).toBe("D");
+    expect(result.workflowState.status).toBe("idle");
+    expect(result.engineState.status).toBe("ready");
+    expect(result.engineState.history.some((entry) => entry.stage === "D" && entry.success)).toBe(false);
+    expect(result.engineState.history.some((entry) => entry.stage === "Q" && entry.success)).toBe(true);
+  });
+
+  it("rejectCurrentStage throws for non-gate stage", async () => {
+    await initWorkflow(config);
+    await expect(rejectCurrentStage(config, "Q")).rejects.toThrow("not a gate");
+  });
+
+  it("rewindWorkflowStage moves back and clears target and later history", async () => {
+    await initWorkflow(config);
+
+    const wf = {
+      featureId: "test-feature",
+      currentStage: "D" as const,
+      status: "waiting_approval" as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const eng = {
+      featureId: "test-feature",
+      currentStage: "D" as const,
+      status: "waiting_approval" as const,
+      approvals: [],
+      stage_attempts: { Q: 1, R: 1, D: 1 },
+      history: [
+        {
+          stage: "Q" as const,
+          attempt: 1,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          runDir: "q-run",
+          success: true,
+        },
+        {
+          stage: "R" as const,
+          attempt: 1,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          runDir: "r-run",
+          success: true,
+        },
+        {
+          stage: "D" as const,
+          attempt: 1,
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          runDir: "d-run",
+          success: true,
+        },
+      ],
+      updatedAt: new Date().toISOString(),
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+
+    const result = await rewindWorkflowStage(config, "R", "Revisit research");
+    expect(result.workflowState.currentStage).toBe("R");
+    expect(result.workflowState.status).toBe("idle");
+    expect(result.engineState.currentStage).toBe("R");
+    expect(result.engineState.status).toBe("ready");
+    expect(result.engineState.history.map((entry) => entry.stage)).toEqual(["Q"]);
+  });
+
+  it("rewindWorkflowStage rejects moving to a future stage", async () => {
+    await initWorkflow(config);
+    await expect(rewindWorkflowStage(config, "D")).rejects.toThrow("future stage");
   });
 
   it("advanceWorkflowStage advances non-gate stage", async () => {

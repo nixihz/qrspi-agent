@@ -30,6 +30,13 @@ qrspi run --input "Add user authentication with email+password and OAuth"
 qrspi status
 ```
 
+When a project contains multiple workflows under `.qrspi/`, select one explicitly:
+
+```bash
+qrspi status --feature user-authentication
+qrspi run --feature user-authentication --runner mock --max-stages 1
+```
+
 ## Features
 
 - 8-stage workflow with human approval gates for `D`, `S`, and `PR`
@@ -37,6 +44,26 @@ qrspi status
 - Stage validation and structured parsing
 - Claude Code, Codex CLI, and mock runners
 - English and Chinese prompt rendering
+- Multiple workflow selection via `--feature <id>`
+- Gate rejection via `qrspi reject` and workflow rollback via `qrspi rewind <stage>`
+
+## Common Commands
+
+```bash
+qrspi init <feature_id> --root .
+qrspi list --root .
+qrspi status --root . --feature <feature_id>
+qrspi stage --root . --feature <feature_id>
+qrspi prompt Q --render --root . --feature <feature_id> --input "requirement"
+qrspi run --root . --feature <feature_id> --runner mock --max-stages 1
+qrspi approve --root . --feature <feature_id>
+qrspi reject --root . --feature <feature_id> --comment "needs changes"
+qrspi rewind R --root . --feature <feature_id> --reason "redo research"
+qrspi slice add mock-api --root . --feature <feature_id> --desc "Create mock API" --order 1 --checkpoint "curl passes"
+qrspi slice list --root . --feature <feature_id>
+qrspi context --root . --feature <feature_id>
+qrspi budget
+```
 
 ## Runners
 

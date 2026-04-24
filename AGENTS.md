@@ -84,7 +84,7 @@ qrspi-agent/
 ├── docs/
 │   └── README.zh.md            # Chinese guide
 ├── package.json                # Root workspace config
-├── README.md                   # Human-facing user guide (Chinese)
+├── README.md                   # Human-facing English user guide
 └── AGENTS.md                   # This document
 ```
 
@@ -110,6 +110,7 @@ Stage definitions are in `packages/qrspi/src/workflow/stage-schema.ts`. Gate pol
 ### Key Data Types
 
 - `SessionConfig`: Workflow session configuration, defines `featureId`, `projectRoot`, `outputDir` (default `.qrspi`)
+- `ProjectConfig`: Project-level configuration before a concrete workflow feature is selected
 - `WorkflowState`: State machine that manages current stage, artifact storage/retrieval, and state persistence (`state.json`)
 - `EngineState`: Engine runtime state, including approval records, attempt counts, and historical runs (`engine_state.json`)
 - `StageArtifact`: Stage artifact, automatically saved as `artifacts/<STAGE>_<YYYY-MM-DD>.md`
@@ -152,17 +153,22 @@ Stage definitions are in `packages/qrspi/src/workflow/stage-schema.ts`. Gate pol
 ```bash
 qrspi init <feature_id> --root <dir>          # Initialize workflow
 qrspi list --root <dir>                       # List all workflow features
-qrspi stage --root <dir>                      # View current stage
-qrspi prompt <Q/R/D/S/P/W/I/PR> --render     # Get/render stage prompt
-qrspi advance --root <dir>                    # Manually advance to next stage
-qrspi approve --root <dir>                    # Approve gate stage and continue
-qrspi run --root <dir> --input "requirement"  # Auto-run until gate or finish
-qrspi status --root <dir>                     # View full status
-qrspi slice --add/--list --root <dir>         # Manage vertical slices
+qrspi stage --root <dir> --feature <id>       # View current stage
+qrspi prompt <Q/R/D/S/P/W/I/PR> --render --feature <id>  # Get/render stage prompt
+qrspi advance --root <dir> --feature <id>     # Manually advance to next stage
+qrspi approve --root <dir> --feature <id>     # Approve gate stage and continue
+qrspi reject --root <dir> --feature <id>      # Reject current gate and regenerate it
+qrspi rewind <stage> --root <dir> --feature <id>  # Rewind to an earlier stage
+qrspi run --root <dir> --feature <id> --input "requirement"  # Auto-run until gate or finish
+qrspi status --root <dir> --feature <id>      # View full status
+qrspi slice add <name> --root <dir> --feature <id> --desc "..." --order 1 --checkpoint "..."  # Add a vertical slice
+qrspi slice list --root <dir> --feature <id>  # List vertical slices
 qrspi budget                                  # View instruction budget report
-qrspi context --root <dir>                    # View current stage context strategy
+qrspi context --root <dir> --feature <id>     # View current stage context strategy
 qrspi run --lang zh --input "..."             # Use Chinese prompts (default: en)
 ```
+
+Feature-scoped commands (`status`, `stage`, `prompt`, `run`, `approve`, `reject`, `rewind`, `advance`, `slice`, `context`) use the only existing workflow automatically when exactly one exists. If multiple workflows exist under `.qrspi/`, agents must pass `--feature <id>` and must not guess.
 
 ---
 
@@ -219,6 +225,8 @@ The workflow creates a `.qrspi/<feature_id>/` directory in the target project at
 3. If the stage is a Gate (D/S/PR), state becomes `waiting_approval` until `qrspi approve`
 4. Non-Gate stages with passed validation automatically advance to the next stage
 5. `qrspi advance` only checks if artifact files exist (does not validate content); prefer `qrspi run`
+6. `qrspi reject` applies only to gate stages waiting for approval, clears that stage's successful history entry, and marks the same stage ready to regenerate
+7. `qrspi rewind <stage>` moves back to an earlier stage, clears approvals/history at that stage and later, and marks the target stage ready to regenerate
 
 ---
 
@@ -230,8 +238,9 @@ Tests cover the following areas:
 2. **Validator Tests**: Validation logic per stage for various inputs
 3. **ContextBuilder Tests**: Stage dependency resolution logic
 4. **Runner Tests**: MockRunner deterministic output, real runner command assembly
-5. **Engine Tests**: Gate pause, approval resume, failure retry, state persistence
+5. **Engine Tests**: Gate pause, approval resume, gate rejection, rewind, failure retry, state persistence
 6. **Parser Tests**: Accuracy of parsing stage artifacts into structured data
+7. **CLI Tests**: Feature scoping, multiple-workflow errors, gate controls, slice routing
 
 ---
 

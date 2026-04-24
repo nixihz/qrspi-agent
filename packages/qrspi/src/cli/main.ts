@@ -2,20 +2,29 @@
 import { Command } from "commander";
 import { createRequire } from "module";
 import { resolve, join } from "path";
+import { fileURLToPath } from "url";
 
 import type {
+  AdvanceCommandOptions,
   CliGlobalOptions,
-  RunCommandOptions,
+  FeatureScopedCommandOptions,
   InitCommandOptions,
   PromptCommandOptions,
+  ProjectConfig,
+  RejectCommandOptions,
+  RewindCommandOptions,
+  RunCommandOptions,
   StageCode,
   SessionConfig,
+  SliceAddCommandOptions,
   SliceDefinition,
 } from "../workflow/types.js";
 import {
   initWorkflow,
   runWorkflow,
   approveCurrentStage,
+  rejectCurrentStage,
+  rewindWorkflowStage,
   advanceWorkflowStage,
 } from "../engine/engine.js";
 import {
@@ -54,39 +63,81 @@ function resolveLangFromEnv(): string {
   return envLang.startsWith("zh") ? "zh" : "en";
 }
 
-function resolveConfig(opts: CliGlobalOptions): SessionConfig {
-  const projectRoot = resolve(opts.root ?? process.cwd());
+function resolveProjectConfig(opts: CliGlobalOptions): ProjectConfig {
   return {
-    featureId: "",
-    projectRoot,
+    projectRoot: resolve(opts.root ?? process.cwd()),
     outputDir: ".qrspi",
   };
 }
 
-async function getFeatureConfig(opts: CliGlobalOptions): Promise<SessionConfig> {
-  const base = resolveConfig(opts);
-  const stateFile = join(base.projectRoot, base.outputDir);
-  const { readdir } = await import("fs/promises");
-  try {
-    const dirs = await readdir(stateFile);
-    if (dirs.length === 1) {
-      return { ...base, featureId: dirs[0] };
+function createSessionConfig(
+  projectConfig: ProjectConfig,
+  featureId: string,
+): SessionConfig {
+  return {
+    ...projectConfig,
+    featureId,
+  };
+}
+
+async function resolveFeatureConfig(
+  opts: FeatureScopedCommandOptions,
+): Promise<{ config?: SessionConfig; error?: string }> {
+  const projectConfig = resolveProjectConfig(opts);
+  const workflows = await listFeatures(projectConfig.projectRoot, projectConfig.outputDir);
+  const availableFeatures = workflows.map((workflow) => workflow.featureId);
+  const requestedFeatureId = (opts.featureId ?? opts.feature)?.trim();
+
+  if (requestedFeatureId) {
+    if (!availableFeatures.includes(requestedFeatureId)) {
+      const available = availableFeatures.length > 0 ? ` Available features: ${availableFeatures.join(", ")}` : "";
+      return {
+        error: `[QRSPI] Workflow not found for feature: ${requestedFeatureId}.${available}`,
+      };
     }
-    for (const d of dirs) {
-      const state = await readWorkflowState({ ...base, featureId: d });
-      if (state) return { ...base, featureId: d };
-    }
-  } catch {
-    // no .qrspi dir
+
+    return {
+      config: createSessionConfig(projectConfig, requestedFeatureId),
+    };
   }
-  return base;
+
+  if (availableFeatures.length === 0) {
+    return {
+      error: "[QRSPI] No workflow found. Run qrspi init <feature_id> first",
+    };
+  }
+
+  if (availableFeatures.length > 1) {
+    return {
+      error: `[QRSPI] Multiple workflows found: ${availableFeatures.join(", ")}. Re-run with --feature <id>.`,
+    };
+  }
+
+  return {
+    config: createSessionConfig(projectConfig, availableFeatures[0]),
+  };
+}
+
+async function requireFeatureConfig(
+  opts: FeatureScopedCommandOptions,
+): Promise<SessionConfig | null> {
+  const result = await resolveFeatureConfig(opts);
+  if (!result.config) {
+    printErr(result.error ?? "[QRSPI] Failed to resolve workflow");
+    return null;
+  }
+
+  return result.config;
+}
+
+function withFeatureOption(cmd: Command): Command {
+  return cmd.option("--feature <id>", "Feature ID");
 }
 
 export async function handleInitCommand(opts: InitCommandOptions): Promise<number> {
   const config: SessionConfig = {
     featureId: opts.featureId,
-    projectRoot: resolve(opts.root ?? process.cwd()),
-    outputDir: ".qrspi",
+    ...resolveProjectConfig(opts),
   };
 
   const { workflowState } = await initWorkflow(config);
@@ -95,10 +146,11 @@ export async function handleInitCommand(opts: InitCommandOptions): Promise<numbe
   return 0;
 }
 
-export async function handleStatusCommand(opts: CliGlobalOptions): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId) {
-    printErr("[QRSPI] No workflow found. Run qrspi init <feature_id> first");
+export async function handleStatusCommand(
+  opts: FeatureScopedCommandOptions,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
 
@@ -108,10 +160,11 @@ export async function handleStatusCommand(opts: CliGlobalOptions): Promise<numbe
   return 0;
 }
 
-export async function handleStageCommand(opts: CliGlobalOptions): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId) {
-    printErr("[QRSPI] No workflow found");
+export async function handleStageCommand(
+  opts: FeatureScopedCommandOptions,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
 
@@ -121,16 +174,15 @@ export async function handleStageCommand(opts: CliGlobalOptions): Promise<number
 }
 
 export async function handleListCommand(opts: CliGlobalOptions): Promise<number> {
-  const projectRoot = resolve(opts.root ?? process.cwd());
-  const features = await listFeatures(projectRoot, ".qrspi");
+  const projectConfig = resolveProjectConfig(opts);
+  const features = await listFeatures(projectConfig.projectRoot, projectConfig.outputDir);
   print(formatFeatureList(features));
   return 0;
 }
 
 export async function handlePromptCommand(opts: PromptCommandOptions): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId) {
-    printErr("[QRSPI] No workflow found");
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
 
@@ -160,12 +212,10 @@ export async function handlePromptCommand(opts: PromptCommandOptions): Promise<n
 }
 
 export async function handleRunCommand(opts: RunCommandOptions): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId && !opts.featureId) {
-    printErr("[QRSPI] No workflow found. Run qrspi init <feature_id> first");
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
-  if (opts.featureId) config.featureId = opts.featureId;
 
   const runnerName = resolveRunnerName(opts.runner);
   const runner = buildRunner(runnerName, { model: opts.model });
@@ -219,22 +269,24 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
 }
 
 export async function handleApproveCommand(
-  opts: CliGlobalOptions,
+  opts: FeatureScopedCommandOptions,
   stage?: string,
 ): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId) {
-    printErr("[QRSPI] No workflow found");
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
 
   const targetStage = stage as StageCode | undefined;
-  const { workflowState, engineState } = await approveCurrentStage(
+  const currentState =
+    (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
+  const approvedStage = targetStage ?? currentState.currentStage;
+
+  await approveCurrentStage(
     config,
     targetStage,
   );
 
-  const approvedStage = targetStage ?? engineState.currentStage;
   const { getNextStage: getNext } = await import("../workflow/stage-schema.js");
   const nextStage = getNext(approvedStage as StageCode);
 
@@ -246,10 +298,57 @@ export async function handleApproveCommand(
   return 0;
 }
 
-export async function handleAdvanceCommand(opts: CliGlobalOptions & { force?: boolean }): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId) {
-    printErr("[QRSPI] No workflow found");
+export async function handleRejectCommand(
+  opts: RejectCommandOptions,
+  stage?: string,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
+    return 1;
+  }
+
+  const targetStage = stage as StageCode | undefined;
+  const { workflowState } = await rejectCurrentStage(
+    config,
+    targetStage,
+    opts.comment,
+  );
+
+  print(`[QRSPI] Rejected stage: ${workflowState.currentStage}`);
+  print("[QRSPI] Stage is ready to regenerate. Run qrspi run to execute it again.");
+  return 0;
+}
+
+export async function handleRewindCommand(
+  opts: RewindCommandOptions,
+  stage: string,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
+    return 1;
+  }
+
+  if (!isValidStageCode(stage)) {
+    printErr(`[QRSPI] Invalid stage code: ${stage}`);
+    return 1;
+  }
+
+  const { workflowState } = await rewindWorkflowStage(
+    config,
+    stage,
+    opts.reason,
+  );
+
+  print(`[QRSPI] Rewound workflow to stage: ${getStageName(workflowState.currentStage)}`);
+  print("[QRSPI] Stage is ready to regenerate. Run qrspi run to execute it again.");
+  return 0;
+}
+
+export async function handleAdvanceCommand(
+  opts: AdvanceCommandOptions,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
 
@@ -258,10 +357,11 @@ export async function handleAdvanceCommand(opts: CliGlobalOptions & { force?: bo
   return 0;
 }
 
-export async function handleSliceListCommand(opts: CliGlobalOptions): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId) {
-    printErr("[QRSPI] No workflow found");
+export async function handleSliceListCommand(
+  opts: FeatureScopedCommandOptions,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
 
@@ -278,15 +378,14 @@ export async function handleSliceListCommand(opts: CliGlobalOptions): Promise<nu
 }
 
 export async function handleSliceAddCommand(
-  opts: CliGlobalOptions,
+  opts: SliceAddCommandOptions,
   name: string,
   desc: string,
   order: number,
   checkpoint: string,
 ): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId) {
-    printErr("[QRSPI] No workflow found");
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
 
@@ -317,10 +416,11 @@ export async function handleBudgetCommand(_opts: CliGlobalOptions): Promise<numb
   return 0;
 }
 
-export async function handleContextCommand(opts: CliGlobalOptions): Promise<number> {
-  const config = await getFeatureConfig(opts);
-  if (!config.featureId) {
-    printErr("[QRSPI] No workflow found");
+export async function handleContextCommand(
+  opts: FeatureScopedCommandOptions,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts);
+  if (!config) {
     return 1;
   }
 
@@ -356,6 +456,8 @@ export async function main(argv?: string[]): Promise<number> {
       .option("--timeout <ms>", "Timeout in milliseconds", parseInt)
       .option("--lang <code>", "Language (en/zh)", resolveLangFromEnv());
 
+  const featureScopedOpts = (cmd: Command) => withFeatureOption(globalOpts(cmd));
+
   globalOpts(
     program
       .command("init <feature_id>")
@@ -365,11 +467,11 @@ export async function main(argv?: string[]): Promise<number> {
     process.exitCode = code;
   });
 
-  globalOpts(
+  featureScopedOpts(
     program
       .command("status")
       .description("Show workflow status")
-  ).action(async (opts: CliGlobalOptions) => {
+  ).action(async (opts: FeatureScopedCommandOptions) => {
     const code = await handleStatusCommand(opts);
     process.exitCode = code;
   });
@@ -383,16 +485,16 @@ export async function main(argv?: string[]): Promise<number> {
     process.exitCode = code;
   });
 
-  globalOpts(
+  featureScopedOpts(
     program
       .command("stage")
       .description("Show current stage")
-  ).action(async (opts: CliGlobalOptions) => {
+  ).action(async (opts: FeatureScopedCommandOptions) => {
     const code = await handleStageCommand(opts);
     process.exitCode = code;
   });
 
-  globalOpts(
+  featureScopedOpts(
     program
       .command("prompt <stage>")
       .description("Render stage prompt")
@@ -403,52 +505,67 @@ export async function main(argv?: string[]): Promise<number> {
     process.exitCode = code;
   });
 
-  globalOpts(
+  featureScopedOpts(
     program
       .command("run")
       .description("Run the workflow")
       .option("--input <text>", "User requirement input")
-      .option("--feature-id <id>", "Feature ID")
       .option("--max-stages <n>", "Maximum stages to execute", parseInt)
       .option("--no-stop-at-gate", "Do not stop at gate stages")
-  ).action(async (opts: RunCommandOptions & { featureId?: string; "feature-id"?: string }) => {
-    const finalOpts: RunCommandOptions = {
-      ...opts,
-      featureId: opts.featureId ?? opts["feature-id"],
-    };
-    const code = await handleRunCommand(finalOpts);
+  ).action(async (opts: RunCommandOptions) => {
+    const code = await handleRunCommand(opts);
     process.exitCode = code;
   });
 
-  globalOpts(
+  featureScopedOpts(
     program
       .command("approve [stage]")
       .description("Approve a gate stage")
-  ).action(async (stage: string | undefined, opts: CliGlobalOptions) => {
+  ).action(async (stage: string | undefined, opts: FeatureScopedCommandOptions) => {
     const code = await handleApproveCommand(opts, stage);
     process.exitCode = code;
   });
 
-  globalOpts(
+  featureScopedOpts(
+    program
+      .command("reject [stage]")
+      .description("Reject a gate stage and make it ready to regenerate")
+      .option("--comment <text>", "Rejection comment")
+  ).action(async (stage: string | undefined, opts: RejectCommandOptions) => {
+    const code = await handleRejectCommand(opts, stage);
+    process.exitCode = code;
+  });
+
+  featureScopedOpts(
+    program
+      .command("rewind <stage>")
+      .description("Rewind workflow to a previous stage and make it ready to regenerate")
+      .option("--reason <text>", "Rewind reason")
+  ).action(async (stage: string, opts: RewindCommandOptions) => {
+    const code = await handleRewindCommand(opts, stage);
+    process.exitCode = code;
+  });
+
+  featureScopedOpts(
     program
       .command("advance")
       .description("Manually advance to the next stage")
       .option("--force", "Force advance past a gate stage", false)
-  ).action(async (opts: CliGlobalOptions & { force?: boolean }) => {
+  ).action(async (opts: AdvanceCommandOptions) => {
     const code = await handleAdvanceCommand(opts);
     process.exitCode = code;
   });
 
   const sliceCmd = program.command("slice").description("Manage work tree slices");
 
-  globalOpts(
+  featureScopedOpts(
     sliceCmd.command("list").description("List slices")
-  ).action(async (opts: CliGlobalOptions) => {
+  ).action(async (opts: FeatureScopedCommandOptions) => {
     const code = await handleSliceListCommand(opts);
     process.exitCode = code;
   });
 
-  globalOpts(
+  featureScopedOpts(
     sliceCmd
       .command("add <name>")
       .description("Add a slice")
@@ -458,7 +575,7 @@ export async function main(argv?: string[]): Promise<number> {
   ).action(
     async (
       name: string,
-      opts: CliGlobalOptions & { desc?: string; order?: number; checkpoint?: string },
+      opts: SliceAddCommandOptions,
     ) => {
       const code = await handleSliceAddCommand(
         opts,
@@ -478,9 +595,9 @@ export async function main(argv?: string[]): Promise<number> {
     process.exitCode = code;
   });
 
-  globalOpts(
+  featureScopedOpts(
     program.command("context").description("Show current context strategy")
-  ).action(async (opts: CliGlobalOptions) => {
+  ).action(async (opts: FeatureScopedCommandOptions) => {
     const code = await handleContextCommand(opts);
     process.exitCode = code;
   });
@@ -504,7 +621,13 @@ export async function main(argv?: string[]): Promise<number> {
   return typeof code === "number" ? code : 0;
 }
 
-main().catch((err) => {
-  process.stderr.write(`Fatal: ${err instanceof Error ? err.message : String(err)}\n`);
-  process.exit(1);
-});
+const isDirectExecution = process.argv[1]
+  ? resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  : false;
+
+if (isDirectExecution) {
+  main().catch((err) => {
+    process.stderr.write(`Fatal: ${err instanceof Error ? err.message : String(err)}\n`);
+    process.exit(1);
+  });
+}

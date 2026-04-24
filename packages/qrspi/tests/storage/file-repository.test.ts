@@ -16,6 +16,7 @@ import {
   createRunDir,
   writeRunFile,
   transitionWorkflowState,
+  listFeatures,
 } from "../../src/storage/file-repository.js";
 
 function createTempConfig(): SessionConfig {
@@ -133,5 +134,24 @@ describe("file-repository", () => {
     expect(next.currentStage).toBe("R");
     expect(next.status).toBe("ready");
     expect(next.updatedAt).not.toBe(state.updatedAt);
+  });
+
+  it("lists features in stable featureId order", async () => {
+    const alphaConfig: SessionConfig = { ...config, featureId: "alpha-feature" };
+    const zetaConfig: SessionConfig = { ...config, featureId: "zeta-feature" };
+
+    await initializeSessionDirectories(zetaConfig);
+    await writeWorkflowState(zetaConfig, createInitialWorkflowState(zetaConfig));
+    await writeEngineState(zetaConfig, createInitialEngineState(zetaConfig));
+
+    await initializeSessionDirectories(alphaConfig);
+    await writeWorkflowState(alphaConfig, createInitialWorkflowState(alphaConfig));
+    await writeEngineState(alphaConfig, createInitialEngineState(alphaConfig));
+
+    const features = await listFeatures(config.projectRoot, config.outputDir);
+    expect(features.map((feature) => feature.featureId)).toEqual([
+      "alpha-feature",
+      "zeta-feature",
+    ]);
   });
 });

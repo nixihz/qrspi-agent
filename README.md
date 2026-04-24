@@ -30,18 +30,18 @@ RPI solved part of the problem, but exposed three hidden failure modes at scale:
 flowchart LR
     subgraph Alignment [Alignment Phase]
         direction LR
-        Q[Q<br/>Questions]
-        R[R<br/>Research]
-        D[D<br/>Design]
-        S[S<br/>Structure]
-        P[P<br/>Plan]
+        Q[Q    Questions]
+        R[R    Research]
+        D[D    Design]
+        S[S    Structure]
+        P[P    Plan]
     end
 
     subgraph Execution [Execution Phase]
         direction LR
-        W[W<br/>Work Tree]
-        I[I<br/>Implement]
-        PR[PR<br/>Pull Request]
+        W[W    Work Tree]
+        I[I    Implement]
+        PR[PR  Pull Request]
     end
 
     Q --> R
@@ -53,9 +53,9 @@ flowchart LR
     I --> PR
     PR -->|Human Approval| Done([Done])
 
-    style D fill:#ffcc80
-    style S fill:#ffcc80
-    style PR fill:#ffcc80
+    style D fill:#333333
+    style S fill:#333333
+    style PR fill:#333333
 ```
 
 ### Alignment Phase — Get Full Alignment Before Writing a Single Line of Code
@@ -125,6 +125,15 @@ Example output:
 [QRSPI] Current stage: Questions
 ```
 
+If a project has more than one workflow under `.qrspi/`, feature-scoped
+commands require an explicit feature id:
+
+```bash
+qrspi status --feature user-authentication
+qrspi stage --feature user-authentication
+qrspi run --feature user-authentication --runner mock --max-stages 1
+```
+
 ### 2. Get Stage Prompt
 
 ```bash
@@ -167,6 +176,12 @@ qrspi run --runner mock --input "Add user authentication"
 
 # Continue after D / S / PR stage confirmation
 qrspi approve
+
+# Reject the current gate and regenerate it
+qrspi reject --comment "Design misses the migration path"
+
+# Rewind to an earlier stage when upstream assumptions changed
+qrspi rewind R --reason "Need to re-check existing auth middleware"
 ```
 
 ### 4. List Workflows
@@ -190,6 +205,9 @@ QRSPI Workflows
 
 ```bash
 qrspi status
+
+# When multiple workflows exist
+qrspi status --feature user-authentication
 ```
 
 Example output:
@@ -261,6 +279,9 @@ The current version already supports a basic automation chain:
 - Artifacts are automatically parsed into structured data saved to `structured/`
 - `D`, `S`, `PR` stages automatically pause for human confirmation
 - `qrspi approve`: advance to next stage after human confirmation
+- `qrspi reject`: mark the current gate stage ready to regenerate
+- `qrspi rewind <stage>`: move a workflow back to an earlier stage
+- `--feature <id>`: select the workflow explicitly when a project has multiple `.qrspi/<feature>/` sessions
 
 ### 4. Runner and Model Configuration
 

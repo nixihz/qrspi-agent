@@ -125,6 +125,14 @@ qrspi init user-authentication --root .
 [QRSPI] Current stage: Questions
 ```
 
+如果同一个项目的 `.qrspi/` 下有多个工作流，带状态的命令需要显式指定 feature：
+
+```bash
+qrspi status --feature user-authentication
+qrspi stage --feature user-authentication
+qrspi run --feature user-authentication --runner mock --max-stages 1
+```
+
 ### 2. 获取阶段 Prompt
 
 ```bash
@@ -167,6 +175,12 @@ qrspi run --runner mock --input "添加用户认证功能"
 
 # D / S / PR 阶段确认后继续
 qrspi approve
+
+# 拒绝当前 gate 阶段，并准备重新生成
+qrspi reject --comment "设计缺少迁移路径"
+
+# 当上游假设变化时，回退到更早阶段
+qrspi rewind R --reason "需要重新确认现有认证中间件"
 ```
 
 ### 4. 列出工作流
@@ -190,6 +204,9 @@ QRSPI Workflows
 
 ```bash
 qrspi status
+
+# 存在多个工作流时
+qrspi status --feature user-authentication
 ```
 
 示例输出:
@@ -261,6 +278,9 @@ qrspi slice list
 - 产物自动解析为结构化数据保存到 `structured/`
 - `D`、`S`、`PR` 阶段自动暂停等待人工确认
 - `qrspi approve`：人工确认后推进到下一阶段
+- `qrspi reject`：拒绝当前 gate 阶段，并让该阶段准备重新生成
+- `qrspi rewind <stage>`：将工作流回退到指定的更早阶段
+- `--feature <id>`：当一个项目存在多个 `.qrspi/<feature>/` 会话时显式选择目标工作流
 
 ### 4. Runner 与模型配置
 
@@ -388,6 +408,8 @@ qrspi-agent/
 │       └── vitest.config.ts      # 测试配置
 ├── skills/
 │   └── qrspi-cli-workflow/     # 本地 skill，指导 Agent 优先调用 qrspi CLI
+├── docs/
+│   └── README.zh.md            # 中文文档
 ├── package.json                # 根目录 workspace 配置
 ├── README.md                   # 面向人类用户的使用文档
 └── AGENTS.md                   # 面向 AI Coding Agent 的项目指南

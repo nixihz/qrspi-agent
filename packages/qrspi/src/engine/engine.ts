@@ -16,6 +16,7 @@ import {
   isGateStage,
   getStageDefinition,
   getStageName,
+  getStageIndex,
 } from "../workflow/stage-schema.js";
 import {
   readWorkflowState,
@@ -328,6 +329,93 @@ export async function approveCurrentStage(
     next ?? targetStage,
     next ? "idle" : "completed",
   );
+  await writeWorkflowState(config, newWorkflowState);
+
+  return { workflowState: newWorkflowState, engineState: newEngineState };
+}
+
+export async function rejectCurrentStage(
+  config: SessionConfig,
+  stage?: StageCode,
+  comment?: string,
+): Promise<{ workflowState: WorkflowState; engineState: EngineState }> {
+  const workflowState =
+    (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
+  const engineState =
+    (await readEngineState(config)) ?? createInitialEngineState(config);
+
+  const targetStage = stage ?? workflowState.currentStage;
+
+  if (!isGateStage(targetStage)) {
+    throw new Error(`Stage ${targetStage} is not a gate stage, no rejection needed`);
+  }
+
+  if (workflowState.currentStage !== targetStage) {
+    throw new Error(
+      `Cannot reject stage ${targetStage} while current stage is ${workflowState.currentStage}`,
+    );
+  }
+
+  if (engineState.status !== "waiting_approval") {
+    throw new Error(`Stage ${targetStage} is not waiting for approval`);
+  }
+
+  const newEngineState: EngineState = {
+    ...engineState,
+    currentStage: targetStage,
+    status: "ready",
+    lastError: comment ?? `Stage ${targetStage} rejected; ready to regenerate`,
+    history: engineState.history.filter(
+      (entry) => !(entry.stage === targetStage && entry.success),
+    ),
+    updatedAt: new Date().toISOString(),
+  };
+  await writeEngineState(config, newEngineState);
+
+  const newWorkflowState = transitionWorkflowState(workflowState, targetStage, "idle");
+  await writeWorkflowState(config, newWorkflowState);
+
+  return { workflowState: newWorkflowState, engineState: newEngineState };
+}
+
+export async function rewindWorkflowStage(
+  config: SessionConfig,
+  targetStage: StageCode,
+  reason?: string,
+): Promise<{ workflowState: WorkflowState; engineState: EngineState }> {
+  const workflowState =
+    (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
+  const engineState =
+    (await readEngineState(config)) ?? createInitialEngineState(config);
+
+  const targetIndex = getStageIndex(targetStage);
+  const currentIndex = Math.max(
+    getStageIndex(workflowState.currentStage),
+    getStageIndex(engineState.currentStage),
+  );
+
+  if (targetIndex > currentIndex) {
+    throw new Error(
+      `Cannot rewind from ${workflowState.currentStage}/${engineState.currentStage} to future stage ${targetStage}`,
+    );
+  }
+
+  const newEngineState: EngineState = {
+    ...engineState,
+    currentStage: targetStage,
+    status: "ready",
+    approvals: engineState.approvals.filter(
+      (approval) => getStageIndex(approval.stage) < targetIndex,
+    ),
+    history: engineState.history.filter(
+      (entry) => getStageIndex(entry.stage) < targetIndex,
+    ),
+    lastError: reason ?? `Rewound workflow to stage ${targetStage}`,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeEngineState(config, newEngineState);
+
+  const newWorkflowState = transitionWorkflowState(workflowState, targetStage, "idle");
   await writeWorkflowState(config, newWorkflowState);
 
   return { workflowState: newWorkflowState, engineState: newEngineState };

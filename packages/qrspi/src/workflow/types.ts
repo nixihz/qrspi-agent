@@ -30,6 +30,11 @@ export interface SessionConfig {
   outputDir: string;
 }
 
+export interface ProjectConfig {
+  projectRoot: string;
+  outputDir: string;
+}
+
 export interface WorkflowState {
   featureId: string;
   currentStage: StageCode;
@@ -159,6 +164,8 @@ export interface Runner {
 
 export interface CliGlobalOptions {
   root?: string;
+  feature?: string;
+  featureId?: string;
   runner?: RunnerName;
   model?: string;
   timeout?: number;
@@ -167,21 +174,42 @@ export interface CliGlobalOptions {
   lang?: Lang;
 }
 
+export interface FeatureScopedCommandOptions extends CliGlobalOptions {
+  featureId?: string;
+}
+
 export interface InitCommandOptions extends CliGlobalOptions {
   featureId: string;
 }
 
-export interface RunCommandOptions extends CliGlobalOptions {
+export interface RunCommandOptions extends FeatureScopedCommandOptions {
   input?: string;
-  featureId?: string;
   maxStages?: number;
   noStopAtGate?: boolean;
 }
 
-export interface PromptCommandOptions extends CliGlobalOptions {
+export interface PromptCommandOptions extends FeatureScopedCommandOptions {
   stage: StageCode;
   render: boolean;
   input?: string;
+}
+
+export interface RejectCommandOptions extends FeatureScopedCommandOptions {
+  comment?: string;
+}
+
+export interface RewindCommandOptions extends FeatureScopedCommandOptions {
+  reason?: string;
+}
+
+export interface AdvanceCommandOptions extends FeatureScopedCommandOptions {
+  force?: boolean;
+}
+
+export interface SliceAddCommandOptions extends FeatureScopedCommandOptions {
+  desc?: string;
+  order?: number;
+  checkpoint?: string;
 }
 
 export interface SliceDefinition {

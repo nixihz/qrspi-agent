@@ -247,5 +247,5 @@ export async function listFeatures(projectRoot: string, outputDir: string): Prom
   } catch {
     // no .qrspi dir
   }
-  return features;
+  return features.sort((left, right) => left.featureId.localeCompare(right.featureId));
 }
