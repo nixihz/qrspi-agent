@@ -5,6 +5,25 @@ import type { Runner, RunnerExecInput, RunnerExecResult, RunnerOptions } from ".
 import { appendLiveOutput } from "./live-output.js";
 import { resolveRunnerModel } from "./model-resolver.js";
 
+export function buildCodexExecArgs(
+  cwd: string,
+  lastMessageFile: string,
+  model: string | undefined,
+  options: RunnerOptions,
+): string[] {
+  const args = [
+    "exec",
+    "--ephemeral",
+    "--full-auto",
+    "--cd", cwd,
+    "--output-last-message", lastMessageFile,
+    "--color", "never",
+  ];
+  if (model) args.push("--model", model);
+  if (options.codexProfile) args.push("--profile", options.codexProfile);
+  return args;
+}
+
 export class CodexRunner implements Runner {
   readonly name = "codex" as const;
 
@@ -16,15 +35,7 @@ export class CodexRunner implements Runner {
     const start = Date.now();
 
     const lastMessageFile = join(input.cwd, ".qrspi", "_codex_last_message.txt");
-    const args = [
-      "exec",
-      "--full-auto",
-      "--cd", input.cwd,
-      "--output-last-message", lastMessageFile,
-      "--color", "never",
-    ];
-    if (model) args.push("--model", model);
-    if (options.codexProfile) args.push("--profile", options.codexProfile);
+    const args = buildCodexExecArgs(input.cwd, lastMessageFile, model, options);
 
     return new Promise((resolve) => {
       const proc = spawn("codex", args, { cwd: input.cwd });

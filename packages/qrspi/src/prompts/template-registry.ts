@@ -16,10 +16,7 @@ function makeTemplate(
 
 function baseInstructions(stage: StageCode, lang: Lang): string {
   const en: Record<StageCode, string> = {
-    Q: `You are a structured programming agent. Execute tasks strictly according to the workflow stage.
-
-## Instructions
-1. Analyze the given feature ticket or requirement description
+    Q: `1. Analyze the given feature ticket or requirement description
 2. Identify all technical information needed to implement this feature
 3. Produce 5-15 concrete, researchable technical questions
 4. Each question must point to a specific aspect of the codebase (API, database, component, etc.)
@@ -48,10 +45,7 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 [Mark the highest-risk uncertainties]
 \`\`\``,
 
-    R: `You are a structured programming agent. Execute tasks strictly according to the workflow stage.
-
-## Instructions
-1. Based on the technical questions from stage Q, collect objective facts from the codebase
+    R: `1. Based on the technical questions from stage Q, collect objective facts from the codebase
 2. Produce a technical map, not a plan or solution
 3. Each finding must have codebase evidence (files, functions, patterns)
 4. Identify key dependency relationships and existing constraints
@@ -74,10 +68,7 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 [Discovered technical constraints]
 \`\`\``,
 
-    D: `You are a structured programming agent. Execute tasks strictly according to the workflow stage.
-
-## Instructions
-1. Based on stages Q and R, produce a design discussion document
+    D: `1. Based on stages Q and R, produce a design discussion document
 2. Describe current state, target state, and design decisions
 3. Each decision must include a recommended option, alternatives, and questions needing confirmation
 4. Produce approximately 200 lines of markdown
@@ -98,10 +89,7 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 ## 5. Risks and Mitigations
 \`\`\``,
 
-    S: `You are a structured programming agent. Execute tasks strictly according to the workflow stage.
-
-## Instructions
-1. Based on the design discussion, define complete type definitions and function signatures
+    S: `1. Based on the design discussion, define complete type definitions and function signatures
 2. Determine vertical slice partitioning
 3. Do not write implementations, only interfaces and types
 4. Must cover all core entities
@@ -124,10 +112,7 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 [Slice list]
 \`\`\``,
 
-    P: `You are a structured programming agent. Execute tasks strictly according to the workflow stage.
-
-## Instructions
-1. Based on the structure outline, produce a detailed implementation plan
+    P: `1. Based on the structure outline, produce a detailed implementation plan
 2. For each slice, list modification items (files, actions, risks)
 3. Include test strategy and checkpoints
 4. Do not write implementation code
@@ -144,10 +129,7 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
 ### Checkpoint
 \`\`\``,
 
-    W: `You are a structured programming agent. Execute tasks strictly according to the workflow stage.
-
-## Instructions
-1. Produce a work tree JSON organized by vertical slices
+    W: `1. Produce a work tree JSON organized by vertical slices
 2. Each slice must have a checkpoint
 3. Tasks must have estimated_minutes and dependencies
 4. Output pure JSON, do not include markdown
@@ -157,7 +139,7 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
    - "powerful": requires design judgment or broad codebase understanding
 
 ## Output Format
-\`\`\`json
+Return a JSON object with this shape. Do not wrap it in markdown fences:
 {
   "slices": [
     {
@@ -171,12 +153,9 @@ function baseInstructions(stage: StageCode, lang: Lang): string {
     }
   ]
 }
-\`\`\``,
+`,
 
-    I: `You are a structured programming agent. Execute tasks strictly according to the workflow stage.
-
-## Instructions
-1. Implement code slice by slice according to the work tree
+    I: `1. Implement code slice by slice according to the work tree
 2. Verify the checkpoint after completing each slice
 3. Produce an implementation report describing the completion status of each slice
 4. Include problems encountered and solutions
@@ -227,16 +206,24 @@ Never silently produce work you're unsure about.
 \`\`\`markdown
 # Implementation Report
 
+**Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+
 ## Slice N: [Name]
 ### Implementation Content
 ### Verification Result
 ### Remaining Issues
+
+## Self-Review
+- Completeness: ...
+- Quality: ...
+- Discipline: ...
+- Testing: ...
+
+## Files Changed
+- path/to/file: why it changed
 \`\`\``,
 
-    PR: `You are a structured programming agent. Execute tasks strictly according to the workflow stage.
-
-## Instructions
-1. Produce a Pull Request description
+    PR: `1. Produce a Pull Request description
 2. Summarize changes, test coverage, and release criteria
 3. List a review checklist
 
@@ -252,10 +239,7 @@ Never silently produce work you're unsure about.
   };
 
   const zh: Record<StageCode, string> = {
-    Q: `你是一个结构化编程 Agent，严格按照工作流阶段执行任务。
-
-## 指令
-1. 分析给定的 feature ticket 或需求描述
+    Q: `1. 分析给定的 feature ticket 或需求描述
 2. 识别实现该 feature 需要了解的所有技术信息
 3. 产出 5-15 个具体的、可研究的技术问题
 4. 每个问题必须指向代码库的某个具体方面（API、数据库、组件等）
@@ -284,10 +268,7 @@ Never silently produce work you're unsure about.
 [标记最高风险的不确定性]
 \`\`\``,
 
-    R: `你是一个结构化编程 Agent，严格按照工作流阶段执行任务。
-
-## 指令
-1. 基于 Q 阶段的技术问题，收集代码库客观事实
+    R: `1. 基于 Q 阶段的技术问题，收集代码库客观事实
 2. 产出技术地图，而不是计划或方案
 3. 每个发现必须有代码库证据（文件、函数、模式）
 4. 识别关键依赖关系和现有约束
@@ -310,10 +291,7 @@ Never silently produce work you're unsure about.
 [发现的技术约束]
 \`\`\``,
 
-    D: `你是一个结构化编程 Agent，严格按照工作流阶段执行任务。
-
-## 指令
-1. 基于 Q 和 R 阶段，产出设计讨论文档
+    D: `1. 基于 Q 和 R 阶段，产出设计讨论文档
 2. 描述当前状态、期望最终状态、设计决策
 3. 每个决策必须有推荐方案、备选方案和需要确认的问题
 4. 产出约 200 行 markdown
@@ -334,10 +312,7 @@ Never silently produce work you're unsure about.
 ## 5. 风险与缓解
 \`\`\``,
 
-    S: `你是一个结构化编程 Agent，严格按照工作流阶段执行任务。
-
-## 指令
-1. 基于设计讨论，定义完整的类型定义和函数签名
+    S: `1. 基于设计讨论，定义完整的类型定义和函数签名
 2. 确定垂直切片划分
 3. 不要写实现，只写接口和类型
 4. 必须覆盖所有核心实体
@@ -360,10 +335,7 @@ Never silently produce work you're unsure about.
 [切片列表]
 \`\`\``,
 
-    P: `你是一个结构化编程 Agent，严格按照工作流阶段执行任务。
-
-## 指令
-1. 基于结构大纲，产出详细实施计划
+    P: `1. 基于结构大纲，产出详细实施计划
 2. 每个切片列出修改清单（文件、操作、风险）
 3. 包含测试策略和检查点
 4. 不要写实现代码
@@ -380,10 +352,7 @@ Never silently produce work you're unsure about.
 ### 检查点
 \`\`\``,
 
-    W: `你是一个结构化编程 Agent，严格按照工作流阶段执行任务。
-
-## 指令
-1. 产出工作树 JSON，按垂直切片组织任务
+    W: `1. 产出工作树 JSON，按垂直切片组织任务
 2. 每个切片必须有 checkpoint
 3. 任务必须有 estimated_minutes 和 dependencies
 4. 输出纯 JSON，不要包含 markdown
@@ -393,7 +362,7 @@ Never silently produce work you're unsure about.
    - "powerful"：需要设计判断或广泛的代码库理解
 
 ## 输出格式
-\`\`\`json
+返回符合以下结构的 JSON 对象，不要包裹 markdown 代码围栏：
 {
   "slices": [
     {
@@ -407,12 +376,9 @@ Never silently produce work you're unsure about.
     }
   ]
 }
-\`\`\``,
+`,
 
-    I: `你是一个结构化编程 Agent，严格按照工作流阶段执行任务。
-
-## 指令
-1. 按工作树切片逐一实现代码
+    I: `1. 按工作树切片逐一实现代码
 2. 每个切片完成后验证 checkpoint
 3. 产出实现报告，说明每个切片的完成情况
 4. 包含遇到的问题和解决方案
@@ -463,16 +429,24 @@ Never silently produce work you're unsure about.
 \`\`\`markdown
 # 实现报告
 
+**状态：** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+
 ## 切片 N: [名称]
 ### 实现内容
 ### 验证结果
 ### 遗留问题
+
+## 自检
+- 完整性：...
+- 质量：...
+- 纪律：...
+- 测试：...
+
+## 变更文件
+- path/to/file: 变更原因
 \`\`\``,
 
-    PR: `你是一个结构化编程 Agent，严格按照工作流阶段执行任务。
-
-## 指令
-1. 产出 Pull Request 描述
+    PR: `1. 产出 Pull Request 描述
 2. 总结变更内容、测试覆盖、上线条件
 3. 列出审查清单
 
@@ -499,7 +473,7 @@ function renderTemplate(input: PromptTemplateInput): string {
     en: {
       stage: `Stage: ${stage}`,
       role: "Role",
-      roleDesc: "You are a structured programming agent. Execute tasks strictly according to the workflow stage.",
+      roleDesc: "Operate only the current QRSPI stage. Use the provided context as evidence, follow the stage instructions, and do not produce work for later stages.",
       instructions: "Instructions",
       userInput: "User Input",
       footer: "Begin execution. Strictly follow the output format. Do not add content outside the format.",
@@ -507,7 +481,7 @@ function renderTemplate(input: PromptTemplateInput): string {
     zh: {
       stage: `阶段: ${stage}`,
       role: "角色",
-      roleDesc: "你是一个结构化编程 Agent，严格按照工作流阶段执行任务。",
+      roleDesc: "只执行当前 QRSPI 阶段。以提供的上下文为依据，遵循本阶段指令，不产出后续阶段的工作。",
       instructions: "指令",
       userInput: "用户输入",
       footer: "开始执行。严格按输出格式产出，不要添加格式外的内容。",

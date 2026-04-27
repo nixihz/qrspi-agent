@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { buildCodexExecArgs } from "../../src/runner/codex-runner.js";
 import { buildRunner, resolveRunnerName, resolveRunnerModel, supportedRunnerNames } from "../../src/runner/index.js";
 import { MockRunner } from "../../src/runner/mock-runner.js";
 import type { RunnerExecInput } from "../../src/workflow/types.js";
@@ -43,6 +44,31 @@ describe("runner", () => {
     expect(result.meta.model).toBe("custom-model");
   });
 
+  it("runs codex in ephemeral mode to avoid nested session persistence noise", () => {
+    const args = buildCodexExecArgs(
+      "/repo",
+      "/repo/.qrspi/_codex_last_message.txt",
+      "gpt-5.5",
+      { codexProfile: "default" },
+    );
+
+    expect(args).toEqual([
+      "exec",
+      "--ephemeral",
+      "--full-auto",
+      "--cd",
+      "/repo",
+      "--output-last-message",
+      "/repo/.qrspi/_codex_last_message.txt",
+      "--color",
+      "never",
+      "--model",
+      "gpt-5.5",
+      "--profile",
+      "default",
+    ]);
+  });
+
   it("mock runner executes", async () => {
     const runner = new MockRunner();
     const input: RunnerExecInput = {
@@ -70,5 +96,20 @@ describe("runner", () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout.length).toBeGreaterThan(0);
     }
+  });
+
+  it("mock runner PR template uses the canonical PR sections", async () => {
+    const runner = new MockRunner();
+    const result = await runner.run({
+      prompt: "test",
+      cwd: "/tmp",
+      stage: "PR",
+      options: {},
+    });
+
+    expect(result.stdout).toContain("## Change Summary");
+    expect(result.stdout).toContain("## Test Coverage");
+    expect(result.stdout).toContain("## Release Criteria");
+    expect(result.stdout).toContain("## Review Checklist");
   });
 });

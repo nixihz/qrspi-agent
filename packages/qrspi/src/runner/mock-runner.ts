@@ -236,12 +236,6 @@ All 4 vertical slices have been implemented.
 ## Change Summary
 Added TypeScript version of qrspi CLI under packages/qrspi/.
 
-## Code Review Checklist
-- [ ] Disk protocol compatibility tests pass
-- [ ] All 11 commands callable normally
-- [ ] Mock runner stable output
-- [ ] Gate stages correctly pause
-
 ## Test Coverage
 - Unit tests: runner, validator, storage
 - e2e: mock-run complete closed loop
@@ -249,7 +243,13 @@ Added TypeScript version of qrspi CLI under packages/qrspi/.
 ## Release Criteria
 1. TypeScript compilation has no errors
 2. All tests pass
-3. Parallel validation with Python version`,
+3. Parallel validation with Python version
+
+## Review Checklist
+- [ ] Disk protocol compatibility tests pass
+- [ ] All 11 commands callable normally
+- [ ] Mock runner stable output
+- [ ] Gate stages correctly pause`,
 };
 
 export class MockRunner implements Runner {

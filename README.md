@@ -53,9 +53,6 @@ flowchart LR
     I --> PR
     PR -->|Human Approval| Done([Done])
 
-    style D fill:#333333
-    style S fill:#333333
-    style PR fill:#333333
 ```
 
 ### Alignment Phase — Get Full Alignment Before Writing a Single Line of Code
@@ -83,6 +80,19 @@ Work Tree → I → PR
 | **W** | Work Tree | Vertical slice task tree | Mock API → Frontend → Database |
 | **I** | Implement | Working code | Each slice is an independent session |
 | **PR** | Pull Request | Structured PR description | Human must read and own the code |
+
+### Execution Status Semantics
+
+`I` stage now distinguishes between formatting success and execution success:
+
+- `DONE`: implementation completed and verified
+- `DONE_WITH_CONCERNS`: implementation completed, but the agent still has correctness concerns
+- `BLOCKED`: implementation cannot continue without resolving a concrete blocker
+- `NEEDS_CONTEXT`: implementation cannot continue because required information was not provided
+
+Only `DONE` and `DONE_WITH_CONCERNS` count as a successful `I` stage. If `I` reports `BLOCKED` or `NEEDS_CONTEXT`, the workflow stays on `I` and must not advance to `PR`.
+
+`PR` also has a hard precondition: it can run only after a successful `I` stage.
 
 ---
 
@@ -157,6 +167,9 @@ Save the agent's output to `.qrspi/<feature>/artifacts/Q_<date>.md`, then:
 qrspi advance
 ```
 
+Use this manual path only when you are writing or pasting the stage artifact yourself.
+For gate stages (`D`, `S`, `PR`), do not use `advance` as the normal path. Review the artifact first, then use `qrspi approve` or `qrspi reject`.
+
 ### 3b. Auto-Execute Until Human Gate
 
 If you have Claude Code or Codex CLI configured, you can let the workflow auto-advance:
@@ -191,6 +204,47 @@ qrspi reject --comment "Design misses the migration path"
 qrspi rewind R --reason "Need to re-check existing auth middleware"
 ```
 
+### 3c. Human Gate Review Playbook
+
+`qrspi run` stops automatically at the three human gates: `D`, `S`, and `PR`.
+At that point the workflow status becomes `waiting_approval`, which means the stage artifact already passed validation and now needs a human decision.
+
+What the human should review:
+
+- Open `.qrspi/<feature_id>/artifacts/<STAGE>_<YYYY-MM-DD>.md`
+- Treat that generated design / structure / PR artifact as the review document for the current stage
+- If needed, inspect `.qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/` for `prompt.md`, `validation.json`, `parsed_artifact.json`, `live_stdout.txt`, and `live_stderr.txt`
+
+What can be edited manually:
+
+- You may edit the stage artifact markdown under `artifacts/` if you want the approved version to include human corrections or final wording
+- Do not manually edit `.qrspi/<feature_id>/state.json` or `engine_state.json`
+- Do not move stages forward by modifying files under `.qrspi/`; use CLI commands for state transitions
+
+How to choose the next command after `run`:
+
+| Situation after `qrspi run` | Meaning | Next command |
+|------|------|------|
+| Gate artifact looks good | Accept the current stage output and move forward | `qrspi approve` |
+| Gate artifact needs another try, but upstream assumptions are still fine | Regenerate the same gate stage | `qrspi reject --comment "what to fix"` then `qrspi run` |
+| The problem started earlier than the current gate | Move back to an earlier stage and regenerate from there | `qrspi rewind <Q/R/D/S/P/W/I> --reason "why"` then `qrspi run` |
+| `I` stage reports `BLOCKED` or `NEEDS_CONTEXT` | Implementation could not finish; inspect the artifact and provide missing context or rewind | `qrspi status`, inspect `.qrspi/.../artifacts/I_<date>.md`, then `qrspi run` or `qrspi rewind ...` |
+
+Common gate examples:
+
+```bash
+# D stage looks correct, continue to S
+qrspi approve D
+
+# S stage structure is missing an API boundary, regenerate S
+qrspi reject S --comment "Missing service interface for auth provider"
+qrspi run
+
+# PR is wrong because the design itself drifted; rewind to D
+qrspi rewind D --reason "Need to redesign token refresh flow"
+qrspi run
+```
+
 ### 4. List Workflows
 
 ```bash
@@ -204,6 +258,7 @@ QRSPI Workflows
 ============================================================
   ✓ auth: PR (completed)
   ⏸ login-ui: D (waiting_approval)
+  ! huawei-co-package: I (needs_context)
   ○ payment: Q (ready)
 ============================================================
 ```
@@ -285,6 +340,7 @@ The current version already supports a basic automation chain:
 - Stage results are automatically validated by the validator
 - Artifacts are automatically parsed into structured data saved to `structured/`
 - `D`, `S`, `PR` stages automatically pause for human confirmation
+- Human reviewers should read `artifacts/<STAGE>_<date>.md`; they may edit that markdown, but should not edit `state.json` or `engine_state.json`
 - `qrspi approve`: advance to next stage after human confirmation
 - `qrspi reject`: mark the current gate stage ready to regenerate
 - `qrspi rewind <stage>`: move a workflow back to an earlier stage

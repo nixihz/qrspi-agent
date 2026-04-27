@@ -1,5 +1,6 @@
 import { join } from "path";
 import type {
+  ImplementationStatus,
   SessionConfig,
   WorkflowState,
   EngineState,
@@ -38,7 +39,7 @@ import { resolveFileStoreLayout, buildRunDirName } from "../storage/path-resolve
 import { buildContextPack } from "../context/context-builder.js";
 import { createPromptRegistry, renderStagePrompt } from "../prompts/template-registry.js";
 import { validateStageArtifact } from "../validators/stage-validator.js";
-import { parseStageOutput } from "../parsers/artifact-parser.js";
+import { parseStageOutput, type ParsedArtifact } from "../parsers/artifact-parser.js";
 
 export interface RunSingleStageResult {
   workflowState: WorkflowState;
@@ -83,6 +84,11 @@ export async function runSingleStage(
     await writeRunFile(runDir, "context.json", contextPack);
     await writeRunFile(runDir, "live_stdout.txt", "");
     await writeRunFile(runDir, "live_stderr.txt", "");
+
+    const preconditionFailure = getStagePreconditionFailure(stage, updatedEngineState);
+    if (preconditionFailure) {
+      throw new Error(preconditionFailure);
+    }
 
     const runnerResult = await runner.run({
       prompt,
@@ -160,6 +166,42 @@ export async function runSingleStage(
       } catch {
         // not valid JSON, skip
       }
+    }
+
+    const reportedStatus = getReportedStageStatus(stage, parsedArtifact);
+    if (reportedStatus === "BLOCKED" || reportedStatus === "NEEDS_CONTEXT") {
+      const pausedEngineState: EngineState = {
+        ...updatedEngineState,
+        status: reportedStatus === "BLOCKED" ? "blocked" : "needs_context",
+        lastError: `Stage ${stage} reported ${reportedStatus}`,
+        history: [
+          ...updatedEngineState.history,
+          {
+            stage,
+            attempt,
+            startedAt,
+            finishedAt: new Date().toISOString(),
+            runDir,
+            success: false,
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+      await writeEngineState(config, pausedEngineState);
+
+      const pausedWorkflowState = transitionWorkflowState(
+        workflowState,
+        stage,
+        pausedEngineState.status,
+      );
+      await writeWorkflowState(config, pausedWorkflowState);
+
+      return {
+        workflowState: pausedWorkflowState,
+        engineState: pausedEngineState,
+        artifact,
+        validation,
+      };
     }
 
     const successEngineState: EngineState = {
@@ -286,6 +328,14 @@ export async function runWorkflow(
 
     if (!result.validation.valid) break;
 
+    if (
+      result.engineState.status === "failed" ||
+      result.engineState.status === "blocked" ||
+      result.engineState.status === "needs_context"
+    ) {
+      break;
+    }
+
     if (isGateStage(stage)) {
       break;
     }
@@ -300,6 +350,36 @@ export async function runWorkflow(
   }
 
   return { workflowState, engineState, results };
+}
+
+function getReportedStageStatus(
+  stage: StageCode,
+  parsedArtifact: ParsedArtifact,
+): ImplementationStatus | undefined {
+  if (stage !== "I") return undefined;
+  const rawStatus = parsedArtifact.structured_data.status;
+  if (
+    rawStatus === "DONE" ||
+    rawStatus === "DONE_WITH_CONCERNS" ||
+    rawStatus === "BLOCKED" ||
+    rawStatus === "NEEDS_CONTEXT"
+  ) {
+    return rawStatus;
+  }
+  return undefined;
+}
+
+function getStagePreconditionFailure(stage: StageCode, engineState: EngineState): string | undefined {
+  if (stage !== "PR") return undefined;
+
+  const hasSuccessfulImplementation = engineState.history.some(
+    (entry) => entry.stage === "I" && entry.success,
+  );
+  if (!hasSuccessfulImplementation) {
+    return "PR stage requires a successful I stage (DONE or DONE_WITH_CONCERNS)";
+  }
+
+  return undefined;
 }
 
 export async function approveCurrentStage(

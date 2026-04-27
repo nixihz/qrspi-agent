@@ -5,12 +5,21 @@
  * so subsequent stages do not have to guess key fields from free text.
  */
 
-import type { StageCode } from "../workflow/types.js";
+import type { ImplementationStatus, StageCode } from "../workflow/types.js";
 
 export interface ParsedArtifact {
   stage: StageCode;
   summary: string;
   structured_data: Record<string, unknown>;
+}
+
+export interface ImplementationReportMetadata {
+  status?: ImplementationStatus;
+  modifiedItems: string[];
+  tests: string[];
+  remainingIssues: string[];
+  filesChanged: string[];
+  selfReview: string[];
 }
 
 export function parseStageOutput(stage: StageCode, content: string): ParsedArtifact {
@@ -165,26 +174,38 @@ function parseW(content: string): ParsedArtifact {
 }
 
 function parseI(content: string): ParsedArtifact {
-  const modified = extractBullets(content, "## Changes") ?? extractBullets(content, "## 完成的修改");
-  const tests = extractBullets(content, "## Test Results") ?? extractBullets(content, "## 测试结果");
-  const summary = `Implementation records ${modified.length} changes, ${tests.length} test results.`;
+  const metadata = extractImplementationReportMetadata(content);
+  const statusLabel = metadata.status ?? "UNKNOWN";
+  const summary = `Implementation status ${statusLabel} with ${metadata.modifiedItems.length} change entries and ${metadata.tests.length} verification entries.`;
   return {
     stage: "I",
     summary,
     structured_data: {
-      modified_items: modified,
-      tests,
+      status: metadata.status ?? null,
+      modified_items: metadata.modifiedItems,
+      tests: metadata.tests,
+      remaining_issues: metadata.remainingIssues,
+      files_changed: metadata.filesChanged,
+      self_review: metadata.selfReview,
     },
   };
 }
 
 function parsePR(content: string): ParsedArtifact {
-  const tests = extractBullets(content, "## Tests") ?? extractBullets(content, "## 测试");
-  const summary = `PR artifact generated with ${tests.length} test entries.`;
+  const changes = extractSectionItems(content, ["Change Summary", "变更摘要"]);
+  const tests = extractSectionItems(content, ["Tests", "Test Coverage", "测试", "测试覆盖"]);
+  const releaseCriteria = extractSectionItems(content, ["Release Criteria", "上线条件"]);
+  const reviewChecklist = extractSectionItems(content, ["Review Checklist", "Code Review Checklist", "审查清单"]);
+  const summary = `PR artifact generated with ${changes.length} change entries, ${tests.length} test entries, and ${reviewChecklist.length} checklist items.`;
   return {
     stage: "PR",
     summary,
-    structured_data: { tests },
+    structured_data: {
+      changes,
+      tests,
+      release_criteria: releaseCriteria,
+      review_checklist: reviewChecklist,
+    },
   };
 }
 
@@ -217,6 +238,114 @@ function extractNamedLine(block: string, label: string): string {
   const match = block.match(new RegExp(`\\*\\*${label}\\*\\*:\\s*(.+)`));
   if (match) return match[1].trim();
   return "";
+}
+
+const IMPLEMENTATION_STATUSES: ImplementationStatus[] = [
+  "DONE",
+  "DONE_WITH_CONCERNS",
+  "BLOCKED",
+  "NEEDS_CONTEXT",
+];
+
+export function extractImplementationReportMetadata(content: string): ImplementationReportMetadata {
+  return {
+    status: extractImplementationStatus(content),
+    modifiedItems: extractSectionItems(content, [
+      "Changes",
+      "Completed Changes",
+      "完成的修改",
+      "Implementation Content",
+      "实现内容",
+    ]),
+    tests: extractSectionItems(content, [
+      "Test Results",
+      "Verification Result",
+      "测试结果",
+      "验证结果",
+    ]),
+    remainingIssues: extractSectionItems(content, [
+      "Remaining Issues",
+      "Open Questions",
+      "遗留问题",
+      "未解决问题",
+    ]),
+    filesChanged: extractSectionItems(content, [
+      "Files Changed",
+      "Changed Files",
+      "变更文件",
+      "文件变更",
+    ]),
+    selfReview: extractSectionItems(content, [
+      "Self-Review",
+      "Self Review",
+      "自检",
+      "自查",
+    ]),
+  };
+}
+
+export function extractImplementationStatus(content: string): ImplementationStatus | undefined {
+  const patterns = [
+    /\*\*(?:Status|状态)(?:\s*[:：]\s*)?\*\*\s*[:：]?\s*(DONE_WITH_CONCERNS|NEEDS_CONTEXT|BLOCKED|DONE)\b/i,
+    /^#{1,6}\s*(?:Status|状态)\s*[:：]\s*(DONE_WITH_CONCERNS|NEEDS_CONTEXT|BLOCKED|DONE)\b/im,
+  ];
+
+  for (const pattern of patterns) {
+    const match = content.match(pattern);
+    if (!match) continue;
+    const normalized = match[1].toUpperCase() as ImplementationStatus;
+    if (IMPLEMENTATION_STATUSES.includes(normalized)) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+}
+
+function extractSectionItems(content: string, headings: string[]): string[] {
+  for (const heading of headings) {
+    const bodies = extractSectionBodies(content, heading);
+    if (bodies.length === 0) continue;
+    return bodies.flatMap((body) => normalizeSectionItems(body));
+  }
+  return [];
+}
+
+function extractSectionBodies(content: string, heading: string): string[] {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`^#{2,6}\\s+${escaped}\\s*$`, "gm");
+  const sections: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(content)) !== null) {
+    const bodyStart = match.index + match[0].length;
+    const remainder = content.slice(bodyStart);
+    const nextHeading = /^#{1,6}\s+/m;
+    const nextMatch = nextHeading.exec(remainder);
+    const body = nextMatch
+      ? remainder.slice(0, nextMatch.index).trim()
+      : remainder.trim();
+
+    if (body) {
+      sections.push(body);
+    }
+  }
+
+  return sections;
+}
+
+function normalizeSectionItems(body: string): string[] {
+  const items: string[] = [];
+  for (const rawLine of body.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      items.push(line.slice(2).trim());
+      continue;
+    }
+    items.push(line);
+  }
+  return items;
 }
 
 function shorten(content: string, limit = 200): string {

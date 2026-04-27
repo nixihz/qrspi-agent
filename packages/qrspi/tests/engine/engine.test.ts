@@ -89,6 +89,101 @@ describe("engine", () => {
     expect(result.engineState.status).toBe("failed");
   });
 
+  it("runSingleStage keeps I stage in needs_context when implementation reports missing context", async () => {
+    await initWorkflow(config);
+
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "idle" as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "ready" as const,
+      approvals: [],
+      stage_attempts: { W: 1 },
+      history: [],
+      updatedAt: new Date().toISOString(),
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+
+    const runner = new TestRunner(`
+# 实现报告
+
+**状态：** NEEDS_CONTEXT
+
+## 切片 1: 跨服务媒体契约
+### 实现内容
+未修改代码，先确认阻塞点。
+
+### 验证结果
+- 搜索现有媒体枚举，确认 1-9 已占用
+
+### 遗留问题
+- 需要确认新的 MediaId 数值
+
+## 自检
+- 完整性：缺上下文，未继续改动
+- 质量：避免了猜测性实现
+`);
+
+    const result = await runSingleStage(config, wf, eng, runner);
+    expect(result.validation.valid).toBe(true);
+    expect(result.workflowState.currentStage).toBe("I");
+    expect(result.workflowState.status).toBe("needs_context");
+    expect(result.engineState.status).toBe("needs_context");
+    expect(result.engineState.history[0].success).toBe(false);
+    expect(result.artifact).toBeDefined();
+  });
+
+  it("runSingleStage rejects PR when I stage has not completed successfully", async () => {
+    await initWorkflow(config);
+
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "PR" as const,
+      status: "idle" as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "PR" as const,
+      status: "ready" as const,
+      approvals: [],
+      stage_attempts: { I: 1 },
+      history: [],
+      updatedAt: new Date().toISOString(),
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+
+    const runner = new TestRunner(`
+# Pull Request Review
+
+## Change Summary
+- No-op
+
+## Test Coverage
+- None
+
+## Release Criteria
+- Waiting for implementation
+
+## Review Checklist
+- [ ] Confirm implementation exists
+`);
+
+    const result = await runSingleStage(config, wf, eng, runner);
+    expect(result.validation.valid).toBe(false);
+    expect(result.engineState.status).toBe("failed");
+    expect(result.validation.summary).toContain("successful I stage");
+  });
+
   it("approveCurrentStage approves gate and advances", async () => {
     await initWorkflow(config);
 
@@ -275,5 +370,52 @@ describe("engine", () => {
     expect(result.results.length).toBeGreaterThan(0);
     // runWorkflow executes current stage, stops at gate or failure
     expect(["Q", "D", "S", "PR"]).toContain(result.workflowState.currentStage);
+  });
+
+  it("runWorkflow stops after I reports needs_context", async () => {
+    await initWorkflow(config);
+
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "idle" as const,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "ready" as const,
+      approvals: [],
+      stage_attempts: {},
+      history: [],
+      updatedAt: new Date().toISOString(),
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+
+    const runner = new TestRunner(`
+# Implementation Report
+
+**Status:** NEEDS_CONTEXT
+
+## Slice 1: Media contract
+### Implementation Content
+No code changes made.
+
+### Verification Result
+- Checked existing MediaId allocation
+
+### Remaining Issues
+- Need confirmed MediaId and enum name
+
+## Self-Review
+- Completeness: blocked on missing input
+`);
+
+    const result = await runWorkflow(config, runner, {});
+    expect(result.results).toHaveLength(1);
+    expect(result.workflowState.currentStage).toBe("I");
+    expect(result.engineState.status).toBe("needs_context");
   });
 });

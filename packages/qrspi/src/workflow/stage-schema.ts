@@ -2,7 +2,7 @@ import type { StageCode, StageDefinition, ContextDependency } from "./types.js";
 
 const STAGE_ORDER: StageCode[] = ["Q", "R", "D", "S", "P", "W", "I", "PR"];
 
-const GATE_STAGES: Set<StageCode> = new Set(["D", "S", "PR"]);
+const GATE_STAGES = new Set<StageCode>(["D", "S", "PR"]);
 
 const STAGE_DEFINITIONS: Record<StageCode, StageDefinition> = {
   Q: {

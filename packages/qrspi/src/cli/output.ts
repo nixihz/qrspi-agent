@@ -95,7 +95,12 @@ export function formatRunResults(
         lines.push(`- Stage ${r.stage} is waiting for human confirmation`);
       }
     } else {
-      lines.push(`- ${r.stage} execution failed: ${r.message ?? "Unknown error"}`);
+      const message = r.message ?? "Unknown error";
+      if (message === "blocked" || message === "needs_context") {
+        lines.push(`- ${r.stage} reported ${message} and stayed on ${currentStage}`);
+      } else {
+        lines.push(`- ${r.stage} execution failed: ${message}`);
+      }
     }
   }
 
@@ -126,7 +131,13 @@ export function formatFeatureList(features: Array<{ featureId: string; currentSt
   ];
 
   for (const f of features) {
-    const statusIcon = f.status === "completed" ? "✓" : f.status === "waiting_approval" ? "⏸" : "○";
+    const statusIcon = f.status === "completed"
+      ? "✓"
+      : f.status === "waiting_approval"
+        ? "⏸"
+        : f.status === "blocked" || f.status === "needs_context"
+          ? "!"
+          : "○";
     lines.push(`  ${statusIcon} ${f.featureId}: ${f.currentStage} (${f.status})`);
   }
 

@@ -346,7 +346,7 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
       print(`[QRSPI] Artifact saved: .qrspi/${config.featureId}/artifacts/${r.artifact.stage}_${new Date().toISOString().slice(0, 10)}.md`);
     }
     const next = getStageOrder()[getStageOrder().indexOf(r.workflowState.currentStage) + 1];
-    if (next && r.validation.valid) {
+    if (next && r.validation.valid && r.engineState.status === "ready") {
       print(`[QRSPI] Entering stage: ${getStageName(next)}`);
       print(`  ${getStageDescription(next)}`);
     }
@@ -359,21 +359,22 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
 
     for (let i = 0; i < results.length; i++) {
       const r = results[i];
-      const stageCodes = getStageOrder();
-      const currentStageForResult = stageCodes[i] ?? workflowState.currentStage;
+      const currentStageForResult = r.artifact?.stage ?? r.workflowState.currentStage;
 
-      if (r.validation.valid) {
-        const nextStage = stageCodes[i + 1];
+      if (!r.validation.valid) {
+        print(`- ${currentStageForResult} execution failed: ${r.validation.summary}`);
+      } else if (r.engineState.status === "needs_context" || r.engineState.status === "blocked") {
+        print(`- ${currentStageForResult} reported ${r.engineState.status} and stayed on ${r.workflowState.currentStage}`);
+      } else if (r.validation.valid) {
+        const nextStage = getStageOrder()[getStageOrder().indexOf(currentStageForResult) + 1];
         if (nextStage) {
           print(`- ${currentStageForResult} completed and advanced to ${nextStage}`);
         }
-        if (engineState.status === "waiting_approval") {
-          const gateStage = workflowState.currentStage;
+        if (r.engineState.status === "waiting_approval") {
+          const gateStage = r.workflowState.currentStage;
           print(`- ${gateStage} completed and validated, awaiting human approval`);
           print(`- Stage ${gateStage} is waiting for human confirmation`);
         }
-      } else {
-        print(`- ${currentStageForResult} execution failed: ${r.validation.summary}`);
       }
     }
 
@@ -382,7 +383,13 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
     print(`Engine Status: ${engineState.status}`);
   }
 
-  return results.every((r) => r.validation.valid) ? 0 : 1;
+  return results.every(
+    (r) =>
+      r.validation.valid &&
+      r.engineState.status !== "failed" &&
+      r.engineState.status !== "blocked" &&
+      r.engineState.status !== "needs_context",
+  ) ? 0 : 1;
 }
 
 export async function handleApproveCommand(

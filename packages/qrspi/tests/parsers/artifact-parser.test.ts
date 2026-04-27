@@ -80,24 +80,102 @@ Needs confirmation: Mobile support?`;
   });
 
   it("parses I stage with modifications and tests", () => {
-    const content = `## Changes
-- Add login page
-## Test Results
-- 5 passed`;
+    const content = `# 实现报告
+
+**状态：** NEEDS_CONTEXT
+
+## 切片 1: 媒体契约
+### 实现内容
+未修改代码。
+- 已确认 1-9 已占用
+
+### 验证结果
+- 搜索现有枚举定义
+
+### 遗留问题
+- 需要确认新的 MediaId
+
+## 自检
+- 完整性：未实现，因为缺关键上下文
+
+## 变更文件
+- 无
+`;
     const result = parseStageOutput("I", content);
     expect(result.stage).toBe("I");
-    expect(result.summary).toContain("1 changes");
-    expect(result.structured_data.modified_items).toEqual(["Add login page"]);
-    expect(result.structured_data.tests).toEqual(["5 passed"]);
+    expect(result.summary).toContain("Implementation status NEEDS_CONTEXT");
+    expect(result.structured_data.status).toBe("NEEDS_CONTEXT");
+    expect(result.structured_data.modified_items).toEqual(["未修改代码。", "已确认 1-9 已占用"]);
+    expect(result.structured_data.tests).toEqual(["搜索现有枚举定义"]);
+    expect(result.structured_data.remaining_issues).toEqual(["需要确认新的 MediaId"]);
+    expect(result.structured_data.self_review).toEqual(["完整性：未实现，因为缺关键上下文"]);
+    expect(result.structured_data.files_changed).toEqual(["无"]);
+  });
+
+  it("parses repeated I stage sections across multiple slices", () => {
+    const content = `# Implementation Report
+
+**Status:** DONE
+
+## Slice 1: Auth API
+### Implementation Content
+- Added auth controller
+
+### Verification Result
+- auth controller unit tests passed
+
+### Remaining Issues
+- None
+
+## Slice 2: Auth UI
+### Implementation Content
+- Added login page
+
+### Verification Result
+- login page integration test passed
+
+### Remaining Issues
+- None
+
+## Self-Review
+- Completeness: both slices implemented
+
+## Files Changed
+- src/auth.ts
+- src/login.tsx
+`;
+    const result = parseStageOutput("I", content);
+
+    expect(result.structured_data.modified_items).toEqual([
+      "Added auth controller",
+      "Added login page",
+    ]);
+    expect(result.structured_data.tests).toEqual([
+      "auth controller unit tests passed",
+      "login page integration test passed",
+    ]);
+    expect(result.structured_data.remaining_issues).toEqual([
+      "None",
+      "None",
+    ]);
   });
 
   it("parses PR stage with tests", () => {
-    const content = `## Tests
-- Login test`;
+    const content = `## Change Summary
+- Added login endpoint
+## Test Coverage
+- Login test
+## Release Criteria
+- Deploy auth migration
+## Review Checklist
+- [ ] Verify rollback plan`;
     const result = parseStageOutput("PR", content);
     expect(result.stage).toBe("PR");
     expect(result.summary).toContain("1 test");
     expect(result.structured_data.tests).toEqual(["Login test"]);
+    expect(result.structured_data.changes).toEqual(["Added login endpoint"]);
+    expect(result.structured_data.release_criteria).toEqual(["Deploy auth migration"]);
+    expect(result.structured_data.review_checklist).toEqual(["[ ] Verify rollback plan"]);
   });
 
   it("falls back to generic for unknown stage", () => {

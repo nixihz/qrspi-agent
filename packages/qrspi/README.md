@@ -31,6 +31,24 @@ qrspi run --input "Add user authentication with email+password and OAuth"
 qrspi status
 ```
 
+When `qrspi run` stops at a gate stage (`D`, `S`, `PR`), review the artifact in `.qrspi/<feature_id>/artifacts/<STAGE>_<YYYY-MM-DD>.md`.
+You may edit that markdown as the approved human-reviewed version, but do not edit `.qrspi/<feature_id>/state.json` or `engine_state.json` manually.
+
+Typical next steps after `run`:
+
+```bash
+# Accept the current gate output
+qrspi approve --root . --feature <feature_id>
+
+# Regenerate the same gate stage
+qrspi reject --root . --feature <feature_id> --comment "needs changes"
+qrspi run --root . --feature <feature_id>
+
+# Rewind to an earlier stage, then regenerate
+qrspi rewind D --root . --feature <feature_id> --reason "design needs revision"
+qrspi run --root . --feature <feature_id>
+```
+
 When a project contains multiple workflows under `.qrspi/`, select one explicitly:
 
 ```bash
@@ -43,11 +61,22 @@ qrspi run --feature user-authentication --runner mock --max-stages 1
 - 8-stage workflow with human approval gates for `D`, `S`, and `PR`
 - Artifact persistence under `.qrspi/<feature_id>/`
 - Stage validation and structured parsing
+- Execution-state aware `I` stage: `DONE`, `DONE_WITH_CONCERNS`, `BLOCKED`, `NEEDS_CONTEXT`
+- `PR` precondition enforcement: only runs after a successful `I` stage
 - Claude Code, Codex CLI, and mock runners
 - English and Chinese prompt rendering
 - Prompt template export for review (`qrspi prompt export`)
 - Multiple workflow selection via `--feature <id>`
 - Gate rejection via `qrspi reject` and workflow rollback via `qrspi rewind <stage>`
+
+## Execution Semantics
+
+`I` stage artifacts are now interpreted semantically:
+
+- `DONE` / `DONE_WITH_CONCERNS`: successful implementation
+- `BLOCKED` / `NEEDS_CONTEXT`: stop on `I`, keep the workflow on the same stage, and require human follow-up
+
+`PR` is not allowed to run unless there is already a successful `I` run in workflow history.
 
 ## Common Commands
 

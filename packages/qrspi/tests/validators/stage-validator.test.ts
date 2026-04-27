@@ -196,28 +196,115 @@ risks
     expect(result.issues.filter((i) => i.message.includes("model_tier"))).toHaveLength(0);
   });
 
-  it("validates I stage - basic content passes with warnings", () => {
+  it("validates I stage - basic content is invalid without explicit status", () => {
     const result = validateStageArtifact("I", makeLines(10));
-    expect(result.valid).toBe(true);
-    expect(result.issues.some((i) => i.severity === "warning")).toBe(true);
-  });
-
-  it("validates I stage - missing self-review triggers warning", () => {
-    const content = makeLines(10);
-    const result = validateStageArtifact("I", content);
-    expect(result.issues.some((i) => i.message.includes("self-review"))).toBe(true);
-  });
-
-  it("validates I stage - missing status report triggers warning", () => {
-    const content = makeLines(10);
-    const result = validateStageArtifact("I", content);
+    expect(result.valid).toBe(false);
     expect(result.issues.some((i) => i.message.includes("status report"))).toBe(true);
   });
 
-  it("validates I stage - missing files changed triggers warning", () => {
+  it("validates I stage - missing self-review triggers error for DONE", () => {
+    const content = `
+# Implementation Report
+
+**Status:** DONE
+
+## Slice 1: Auth
+### Implementation Content
+- Added login flow
+
+### Verification Result
+- Tests pass
+
+### Remaining Issues
+- None
+
+## Files Changed
+- src/auth.ts
+`;
+    const result = validateStageArtifact("I", content);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.message.includes("self-review"))).toBe(true);
+  });
+
+  it("validates I stage - missing status report triggers error", () => {
     const content = makeLines(10);
     const result = validateStageArtifact("I", content);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.message.includes("status report"))).toBe(true);
+  });
+
+  it("validates I stage - successful report requires files changed", () => {
+    const content = `
+# Implementation Report
+
+**Status:** DONE_WITH_CONCERNS
+
+## Slice 1: Auth
+### Implementation Content
+- Added login flow
+
+### Verification Result
+- Tests pass
+
+### Remaining Issues
+- Edge case pending
+
+## Self-Review
+- Completeness: all requested changes are present
+- Quality: naming is clear
+- Discipline: no extra refactor
+- Testing: unit coverage added
+`;
+    const result = validateStageArtifact("I", content);
+    expect(result.valid).toBe(false);
     expect(result.issues.some((i) => i.message.includes("files changed"))).toBe(true);
+  });
+
+  it("validates I stage - blocked report requires remaining issues", () => {
+    const content = `
+# 实现报告
+
+**状态：** NEEDS_CONTEXT
+
+## 切片 1: 媒体契约
+### 实现内容
+未修改代码。
+
+### 验证结果
+未运行测试。
+
+## 自检
+- 完整性：未实现，因为缺少关键信息
+`;
+    const result = validateStageArtifact("I", content);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.message.includes("remaining issues"))).toBe(true);
+  });
+
+  it("validates I stage - blocked report can pass without files changed", () => {
+    const content = `
+# 实现报告
+
+**状态：** BLOCKED
+
+## 切片 1: 媒体契约
+### 实现内容
+未修改代码，先核对跨服务枚举占用。
+
+### 验证结果
+- 搜索现有定义，确认 1-9 已占用
+
+### 遗留问题
+- 需要业务确认新的 MediaId 数值
+
+## 自检
+- 完整性：已确认阻塞点
+- 质量：未做猜测性修改
+- 纪律：未超范围改动
+- 测试：未进入代码修改阶段
+`;
+    const result = validateStageArtifact("I", content);
+    expect(result.valid).toBe(true);
   });
 
   it("validates I stage - complete content passes without warnings", () => {
@@ -237,6 +324,8 @@ None
 ## Self-Review
 - Completeness: all done
 - Quality: clean
+- Discipline: scoped to request
+- Testing: covers changed behavior
 
 ## Status: DONE
 
@@ -249,8 +338,33 @@ None
     expect(result.issues).toHaveLength(0);
   });
 
-  it("validates PR stage", () => {
-    expect(validateStageArtifact("PR", makeLines(10)).valid).toBe(true);
+  it("validates PR stage with warnings for underspecified content", () => {
+    const result = validateStageArtifact("PR", makeLines(10));
+    expect(result.valid).toBe(true);
+    expect(result.issues.some((i) => i.message.includes("Change Summary"))).toBe(true);
+  });
+
+  it("validates PR stage - complete content passes without warnings", () => {
+    const content = `
+# Pull Request Review
+
+## Change Summary
+- Added login endpoint
+
+## Test Coverage
+- unit: auth service
+- integration: login flow
+
+## Release Criteria
+- apply auth migration
+
+## Review Checklist
+- [ ] rollback plan reviewed
+- [ ] metrics updated
+`;
+    const result = validateStageArtifact("PR", content);
+    expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(0);
   });
 
   it("creates validators for all stages", () => {

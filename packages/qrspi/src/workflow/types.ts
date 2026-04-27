@@ -9,8 +9,16 @@ export type SessionStatus =
   | "ready"
   | "running"
   | "failed"
+  | "blocked"
+  | "needs_context"
   | "waiting_approval"
   | "completed";
+
+export type ImplementationStatus =
+  | "DONE"
+  | "DONE_WITH_CONCERNS"
+  | "BLOCKED"
+  | "NEEDS_CONTEXT";
 
 export type ValidationSeverity = "error" | "warning" | "info";
 

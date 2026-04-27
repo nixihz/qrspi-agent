@@ -1,9 +1,11 @@
 import type {
+  ImplementationStatus,
   StageCode,
   ValidationResult,
   ValidationIssue,
   StageValidator,
 } from "../workflow/types.js";
+import { extractImplementationReportMetadata, parseStageOutput } from "../parsers/artifact-parser.js";
 
 function makeResult(
   stage: StageCode,
@@ -199,38 +201,34 @@ function validateI(content: string): ValidationResult {
   const lenIssue = checkMinLength(content, 5, "I");
   if (lenIssue) issues.push(lenIssue);
 
-  const lower = content.toLowerCase();
-  const hasSelfReview =
-    lower.includes("self-review") ||
-    lower.includes("self review") ||
-    content.includes("自检") ||
-    content.includes("自查");
-  if (!hasSelfReview) {
-    issues.push({ severity: "warning", message: "Missing self-review section" });
+  const metadata = extractImplementationReportMetadata(content);
+  const status = metadata.status;
+
+  if (!status) {
+    issues.push({
+      severity: "error",
+      message: "Missing status report (DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT)",
+    });
+    return makeResult("I", issues);
   }
 
-  const hasStatusReport =
-    lower.includes("done") ||
-    lower.includes("blocked") ||
-    lower.includes("needs_context") ||
-    lower.includes("needs context") ||
-    lower.includes("done_with_concerns") ||
-    lower.includes("done with concerns") ||
-    content.includes("状态") ||
-    content.includes("BLOCKED") ||
-    content.includes("NEEDS_CONTEXT") ||
-    content.includes("DONE_WITH_CONCERNS");
-  if (!hasStatusReport) {
-    issues.push({ severity: "warning", message: "Missing status report (DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT)" });
+  if (metadata.selfReview.length === 0) {
+    const severity = isImplementationSuccessStatus(status) ? "error" : "warning";
+    issues.push({ severity, message: "Missing self-review section" });
   }
 
-  const hasFilesChanged =
-    lower.includes("files changed") ||
-    lower.includes("files:") ||
-    content.includes("变更文件") ||
-    content.includes("文件变更");
-  if (!hasFilesChanged) {
-    issues.push({ severity: "warning", message: "Missing files changed list" });
+  if (isImplementationSuccessStatus(status)) {
+    if (metadata.modifiedItems.length === 0) {
+      issues.push({ severity: "error", message: "Successful I stage must include implementation content" });
+    }
+    if (metadata.tests.length === 0) {
+      issues.push({ severity: "error", message: "Successful I stage must include verification results" });
+    }
+    if (metadata.filesChanged.length === 0) {
+      issues.push({ severity: "error", message: "Successful I stage must include files changed list" });
+    }
+  } else if (metadata.remainingIssues.length === 0) {
+    issues.push({ severity: "error", message: "Blocked I stage must explain remaining issues or missing context" });
   }
 
   return makeResult("I", issues);
@@ -240,7 +238,46 @@ function validatePR(content: string): ValidationResult {
   const issues: ValidationIssue[] = [];
   const lenIssue = checkMinLength(content, 5, "PR");
   if (lenIssue) issues.push(lenIssue);
+
+  const requiredSections: Array<[string, RegExp]> = [
+    ["Change Summary", /^#{2,6}\s+(Change Summary|变更摘要)\b/im],
+    ["Test Coverage", /^#{2,6}\s+(Test Coverage|测试覆盖)\b/im],
+    ["Release Criteria", /^#{2,6}\s+(Release Criteria|上线条件)\b/im],
+    ["Review Checklist", /^#{2,6}\s+(Review Checklist|审查清单)\b/im],
+  ];
+
+  for (const [name, pattern] of requiredSections) {
+    if (!pattern.test(content)) {
+      issues.push({
+        severity: "warning",
+        message: `Missing recommended PR section: ${name}`,
+      });
+    }
+  }
+
+  const parsed = parseStageOutput("PR", content).structured_data;
+  const changeCount = Array.isArray(parsed.changes) ? parsed.changes.length : 0;
+  const testCount = Array.isArray(parsed.tests) ? parsed.tests.length : 0;
+  const releaseCriteriaCount = Array.isArray(parsed.release_criteria) ? parsed.release_criteria.length : 0;
+  const checklistCount = Array.isArray(parsed.review_checklist) ? parsed.review_checklist.length : 0;
+
+  if (changeCount === 0) {
+    issues.push({ severity: "warning", message: "PR artifact should summarize code changes" });
+  }
+  if (testCount === 0) {
+    issues.push({ severity: "warning", message: "PR artifact should include test coverage details" });
+  }
+  if (releaseCriteriaCount === 0) {
+    issues.push({ severity: "warning", message: "PR artifact should include release criteria" });
+  }
+  if (checklistCount === 0) {
+    issues.push({ severity: "warning", message: "PR artifact should include review checklist items" });
+  }
   return makeResult("PR", issues);
+}
+
+function isImplementationSuccessStatus(status: ImplementationStatus): boolean {
+  return status === "DONE" || status === "DONE_WITH_CONCERNS";
 }
 
 const VALIDATORS: Record<StageCode, (content: string) => ValidationResult> = {

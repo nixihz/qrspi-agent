@@ -29,4 +29,16 @@ describe("formatFeatureList", () => {
     ]);
     expect(result).toContain("⏸");
   });
+
+  it("marks blocked and needs_context with exclamation icon", () => {
+    const blocked = formatFeatureList([
+      { featureId: "auth", currentStage: "I", status: "blocked" },
+    ]);
+    const needsContext = formatFeatureList([
+      { featureId: "auth", currentStage: "I", status: "needs_context" },
+    ]);
+
+    expect(blocked).toContain("!");
+    expect(needsContext).toContain("!");
+  });
 });

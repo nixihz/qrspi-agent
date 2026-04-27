@@ -53,9 +53,6 @@ flowchart LR
     I --> PR
     PR -->|人工确认| Done([完成])
 
-    style D fill:#ffcc80
-    style S fill:#ffcc80
-    style PR fill:#ffcc80
 ```
 
 ### Alignment（对齐阶段）— 在写一行代码之前先把对齐做充分
@@ -83,6 +80,20 @@ Work Tree → I → PR
 | **W** | Work Tree (工作树) | 垂直切片任务树 | Mock API → 前端 → 数据库 |
 | **I** | Implement (实现) | 可工作的代码 | 每个切片独立 Session |
 | **PR** | Pull Request (拉取请求) | 结构化 PR 描述 | 人工必须阅读并拥有代码 |
+
+### 执行状态语义
+
+现在 `I` 阶段会区分“报告格式合法”和“实现真正完成”：
+
+- `DONE`：实现完成，且已经做了验证
+- `DONE_WITH_CONCERNS`：实现完成，但 Agent 仍对正确性有顾虑
+- `BLOCKED`：存在明确阻塞，当前不能继续实现
+- `NEEDS_CONTEXT`：缺少必要上下文，当前不能继续实现
+
+只有 `DONE` 和 `DONE_WITH_CONCERNS` 才算成功完成 `I` 阶段。
+如果 `I` 报告 `BLOCKED` 或 `NEEDS_CONTEXT`，工作流会停留在 `I`，不能继续推进到 `PR`。
+
+`PR` 还有一个硬前置条件：只有在 `I` 已经成功完成后，才允许进入 `PR`。
 
 ---
 
@@ -156,6 +167,9 @@ qrspi prompt export --lang zh --split --out qrspi-prompts/
 qrspi advance
 ```
 
+这条手动路径适合“你自己编写或粘贴阶段产物”的场景。
+遇到 gate 阶段（`D`、`S`、`PR`）时，正常流程不要直接用 `advance`，而是先审阅产物，再用 `qrspi approve` 或 `qrspi reject`。
+
 ### 3b. 自动执行直到人工 Gate
 
 如果你已经配置好 Claude Code 或 Codex CLI，也可以让工作流自动推进：
@@ -190,6 +204,47 @@ qrspi reject --comment "设计缺少迁移路径"
 qrspi rewind R --reason "需要重新确认现有认证中间件"
 ```
 
+### 3c. 人工 Gate 处理手册
+
+`qrspi run` 在三个人工卡点 `D`、`S`、`PR` 会自动停下。
+这时工作流状态会变成 `waiting_approval`，含义是：该阶段产物已经通过程序校验，现在需要人来做业务和工程判断。
+
+人应该看什么：
+
+- 打开 `.qrspi/<feature_id>/artifacts/<STAGE>_<YYYY-MM-DD>.md`
+- 把这份生成出来的设计稿 / 结构稿 / PR 稿当作当前阶段的审阅文档
+- 如果要看完整上下文，可以再看 `.qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/` 下的 `prompt.md`、`validation.json`、`parsed_artifact.json`、`live_stdout.txt`、`live_stderr.txt`
+
+哪些内容可以手工修改：
+
+- 可以直接修改 `artifacts/` 里的阶段 markdown，把人工修订后的版本作为后续阶段继承的定稿
+- 不要手改 `.qrspi/<feature_id>/state.json` 或 `engine_state.json`
+- 不要靠改 `.qrspi/` 里的状态文件来“跳阶段”，阶段推进一律走 CLI
+
+`run` 之后怎么选下一条命令：
+
+| `qrspi run` 之后的情况 | 含义 | 下一步命令 |
+|------|------|------|
+| 当前 gate 产物没问题 | 接受当前阶段结果，进入下一阶段 | `qrspi approve` |
+| 当前 gate 产物需要重做，但上游假设没变 | 重新生成同一阶段 | `qrspi reject --comment "要改什么"`，然后再 `qrspi run` |
+| 问题不是当前 gate 才出现，而是更早阶段就偏了 | 回退到更早阶段重新生成 | `qrspi rewind <Q/R/D/S/P/W/I> --reason "原因"`，然后再 `qrspi run` |
+| `I` 阶段返回 `BLOCKED` 或 `NEEDS_CONTEXT` | 实现阶段卡住了，需要补上下文或回退 | 先 `qrspi status`，查看 `.qrspi/.../artifacts/I_<date>.md`，再决定 `qrspi run` 或 `qrspi rewind ...` |
+
+常见 gate 处理示例：
+
+```bash
+# D 阶段设计确认无误，继续到 S
+qrspi approve D
+
+# S 阶段结构缺少接口边界，退回并重生成 S
+qrspi reject S --comment "认证 provider 缺少 service interface"
+qrspi run
+
+# PR 阶段暴露出设计本身偏了，回退到 D 重做
+qrspi rewind D --reason "需要重新设计 token refresh 流程"
+qrspi run
+```
+
 ### 4. 列出工作流
 
 ```bash
@@ -203,6 +258,7 @@ QRSPI Workflows
 ============================================================
   ✓ auth: PR (completed)
   ⏸ login-ui: D (waiting_approval)
+  ! huawei-co-package: I (needs_context)
   ○ payment: Q (ready)
 ============================================================
 ```
@@ -284,6 +340,7 @@ qrspi slice list
 - 阶段结果自动经过 validator 校验
 - 产物自动解析为结构化数据保存到 `structured/`
 - `D`、`S`、`PR` 阶段自动暂停等待人工确认
+- 人工 review 主要看 `artifacts/<STAGE>_<date>.md`；可以改这份 markdown，但不要改 `state.json` 或 `engine_state.json`
 - `qrspi approve`：人工确认后推进到下一阶段
 - `qrspi reject`：拒绝当前 gate 阶段，并让该阶段准备重新生成
 - `qrspi rewind <stage>`：将工作流回退到指定的更早阶段
