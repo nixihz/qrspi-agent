@@ -141,6 +141,6 @@ export function getStageDependencies(stage: StageCode): ContextDependency[] {
   return STAGE_DEFINITIONS[stage].dependencies.map((dep) => ({
     stage: dep,
     required: true,
-    summaryOnly: true,
+    summaryOnly: false,
   }));
 }

@@ -122,7 +122,7 @@ Stage definitions are in `packages/qrspi/src/workflow/stage-schema.ts`. Gate pol
 
 - Context window utilization target: **< 40%**
 - Mandatory session switch threshold: **60%**
-- Each stage only loads summaries of prerequisite artifacts, not full history
+- Each stage loads complete prerequisite artifacts, not unrelated workflow history
 - Stage dependency relationships are defined in `STAGE_DEPENDENCIES` in `packages/qrspi/src/context/context-builder.ts`
 
 ### Prompt Template System
@@ -154,7 +154,7 @@ Stage definitions are in `packages/qrspi/src/workflow/stage-schema.ts`. Gate pol
 qrspi init <feature_id> --root <dir>          # Initialize workflow
 qrspi list --root <dir>                       # List all workflow features
 qrspi stage --root <dir> --feature <id>       # View current stage
-qrspi prompt <Q/R/D/S/P/W/I/PR> --render --feature <id>  # Get/render stage prompt
+qrspi prompt render <Q/R/D/S/P/W/I/PR> --feature <id>  # Get/render stage prompt
 qrspi advance --root <dir> --feature <id>     # Manually advance to next stage
 qrspi approve --root <dir> --feature <id>     # Approve gate stage and continue
 qrspi reject --root <dir> --feature <id>      # Reject current gate and regenerate it
@@ -293,6 +293,5 @@ The validator uses heuristic checks based on markdown structure and regular expr
 ## Known Limitations
 
 1. Slice-level auto-execution for the `WorkTree` and `Implement` stages is not fully implemented — the `I` stage currently runs as a whole, without splitting into independent sessions per vertical slice. The prompt now includes self-review and escalation protocols, but per-slice subagent dispatch is not yet implemented.
-2. ContextBuilder's summarization logic currently truncates the first 40 lines only; it does not perform true intelligent summarization.
-3. The project has no CI/CD configuration.
-4. `model_tier` is captured in the WorkTree but not yet consumed by the runner system for automatic model selection.
+2. The project has no CI/CD configuration.
+3. `model_tier` is captured in the WorkTree but not yet consumed by the runner system for automatic model selection.

@@ -35,11 +35,14 @@ describe("stage-validator", () => {
   it("validates D stage - missing required sections", () => {
     const result = validateStageArtifact("D", makeLines(25));
     expect(result.valid).toBe(false);
-    expect(result.issues.some((i) => i.message.includes("Missing required section"))).toBe(true);
+    expect(result.issues.some((i) => i.message.includes("Design Discussion"))).toBe(true);
+    expect(result.issues.some((i) => i.message.includes("Missing required design section"))).toBe(true);
   });
 
   it("validates D stage - normal content", () => {
     const content = `
+# Design Discussion
+
 ## 1. Current State
 status
 
@@ -47,11 +50,67 @@ status
 expected
 
 ## 3. Design Decisions
-alternative A
-alternative B
+### Decision 1: Use staged rollout
+- **Recommended**: add the new behavior behind explicit media configuration.
+- **Alternative A**: reuse existing QI_MAO behavior.
+- **Needs Confirmation**: confirm the target MediaId.
+
+## 4. Architecture Constraints
+constraints
+
+## 5. Risks and Mitigations
+risks
 ` + makeLines(20);
     const result = validateStageArtifact("D", content);
     expect(result.valid).toBe(true);
+  });
+
+  it("validates D stage - accepts semantic headings without numbering", () => {
+    const content = `
+# Design Discussion
+
+## Current State
+status
+
+## Target State
+expected
+
+## Design Decisions
+### Decision 1: Keep media-specific behavior explicit
+- **Recommended**: introduce the new media branch only where confirmed.
+- **Alternative**: inherit all QI_MAO branches.
+- **Needs Confirmation**: confirm which client capabilities should be shared.
+
+## Architecture Constraints
+constraints
+
+## Risks and Mitigations
+risks
+` + makeLines(20);
+    const result = validateStageArtifact("D", content);
+    expect(result.valid).toBe(true);
+  });
+
+  it("validates D stage - rejects research report output", () => {
+    const content = `
+# Research Report
+
+## Feature Overview
+overview
+
+## Codebase Technical Map
+facts
+
+## Dependency Graph
+dependencies
+
+## Constraints and Risks
+risks
+` + makeLines(20);
+    const result = validateStageArtifact("D", content);
+    expect(result.valid).toBe(false);
+    expect(result.issues.some((i) => i.message.includes("Design Discussion document"))).toBe(true);
+    expect(result.issues.some((i) => i.message.includes("Missing design decision entries"))).toBe(true);
   });
 
   it("validates S stage - missing type definitions", () => {

@@ -1,6 +1,6 @@
 ---
 name: qrspi-cli-workflow
-description: Use when the user wants to initialize, inspect, advance, reject, rewind, or auto-run a QRSPI workflow via the `qrspi` CLI. Covers `qrspi init`, `qrspi list`, `qrspi status`, `qrspi stage`, `qrspi prompt --render`, `qrspi advance`, `qrspi run`, `qrspi approve`, `qrspi reject`, `qrspi rewind`, `qrspi slice`, `qrspi context`, `qrspi budget`, and feature selection via `--feature <id>`. Do NOT manually simulate stage management when the CLI can handle it.
+description: Use when the user wants to initialize, inspect, advance, reject, rewind, export prompts, or auto-run a QRSPI workflow via the `qrspi` CLI. Covers `qrspi init`, `qrspi list`, `qrspi status`, `qrspi stage`, `qrspi prompt render`, `qrspi prompt export`, `qrspi advance`, `qrspi run`, `qrspi approve`, `qrspi reject`, `qrspi rewind`, `qrspi slice`, `qrspi context`, `qrspi budget`, and feature selection via `--feature <id>`. Do NOT manually simulate stage management when the CLI can handle it.
 ---
 
 # QRSPI CLI Workflow
@@ -11,7 +11,7 @@ Trigger this skill when any of the following is true:
 
 - The user wants to start or resume a QRSPI feature workflow in a project
 - The user wants to check current stage, full status, context strategy, or budget
-- The user wants to render a stage prompt for an external agent or runner
+- The user wants to render a stage prompt for an external agent or runner, or export base prompt templates for review
 - The user wants to advance stages, approve or reject gates, rewind to an earlier stage, add slices, or auto-run multi-stage flows
 - The user explicitly mentions `qrspi`, `.qrspi/`, feature workflow, stage advancement, gate, or runner
 
@@ -104,18 +104,26 @@ Let the CLI render the prompt rather than rewriting stage instructions inside th
 Use:
 
 ```bash
-qrspi prompt Q --render --root . --input "requirement description"
-qrspi prompt D --render --root .
+qrspi prompt render Q --root . --input "requirement description"
+qrspi prompt render D --root .
 
 # If multiple workflows exist
-qrspi prompt D --render --root . --feature <feature_id>
+qrspi prompt render D --root . --feature <feature_id>
 ```
 
 Rules:
 
 - Pass `--input` when there is a raw user requirement
-- Omit `--render` when you only want to see the template structure
+- `prompt render` is for workflow-aware prompts; use `prompt export` for base templates
 - Stage codes must be one of `Q/R/D/S/P/W/I/PR`
+
+To export base prompt templates without workflow-specific context or user input:
+
+```bash
+qrspi prompt export --root . --out qrspi-prompts.md
+qrspi prompt export Q --root . --out Q_prompt.md
+qrspi prompt export --root . --lang zh --split --out qrspi-prompts/
+```
 
 ### 4. Advance a stage
 
@@ -204,6 +212,10 @@ Additional rules:
 - Do NOT enable `--no-stop-at-gate` by default
 - Unless the user requests it, do NOT blindly run across many stages
 - For controlled execution, prefer using `--max-stages`
+- Long-running real runner tasks do not have a default timeout
+- To inspect live runner output while a stage is running, read:
+  - `.qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/live_stdout.txt`
+  - `.qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/live_stderr.txt`
 
 ### 8. Manage vertical slices
 

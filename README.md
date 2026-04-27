@@ -138,10 +138,15 @@ qrspi run --feature user-authentication --runner mock --max-stages 1
 
 ```bash
 # View Q stage instructions and validation criteria
-qrspi prompt Q
+qrspi prompt render Q --feature user-authentication
 
 # Render full prompt (ready to use with Claude Code / Codex CLI)
-qrspi prompt Q --render --input "Add user authentication with email+password and OAuth"
+qrspi prompt render Q --feature user-authentication --input "Add user authentication with email+password and OAuth"
+
+# Export base prompt templates for review, without workflow context or user input
+qrspi prompt export --out qrspi-prompts.md
+qrspi prompt export Q --out Q_prompt.md
+qrspi prompt export --split --out qrspi-prompts/
 ```
 
 ### 3. Save Artifact and Advance
@@ -165,8 +170,10 @@ qrspi run --input "Add user authentication with email+password and OAuth"
 # Default model: gpt-5.4
 qrspi run --runner codex --input "Add user authentication with email+password and OAuth"
 
-# If concerned about Claude hanging, set timeout (milliseconds)
-qrspi run --input "Add user authentication" --timeout 180000
+# Long-running real runner tasks have no default timeout.
+# Inspect live output in the current run directory:
+# .qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/live_stdout.txt
+# .qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/live_stderr.txt
 
 # Or explicitly specify model
 qrspi run --input "Add user authentication" --model kimi-for-coding
@@ -250,7 +257,7 @@ qrspi budget
 **Rules:**
 - Keep context utilization **below 40%**
 - Force session switch at **60%**
-- Progress is persisted to disk; new sessions load only what's needed for the current stage
+- Progress is persisted to disk; new sessions load the complete prerequisite artifacts for the current stage
 
 ### 2. Vertical Slices (Better Than Horizontal Layers)
 
@@ -424,7 +431,7 @@ qrspi-agent/
 
 > At 60%, start a new session. This is independent of how large the context window is.
 
-**Practice:** Save progress after each vertical slice, start a new session that loads only what's currently needed.
+**Practice:** Save progress after each vertical slice, start a new session that loads the complete prerequisite artifacts needed for the current stage.
 
 ### Insight Two: Vertical Slices Beat Horizontal Layers
 

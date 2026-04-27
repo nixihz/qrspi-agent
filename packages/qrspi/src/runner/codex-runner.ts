@@ -1,15 +1,18 @@
 import { spawn } from "child_process";
-import { writeFile, readFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import { join } from "path";
-import type { Runner, RunnerExecInput, RunnerExecResult } from "../workflow/types.js";
+import type { Runner, RunnerExecInput, RunnerExecResult, RunnerOptions } from "../workflow/types.js";
+import { appendLiveOutput } from "./live-output.js";
 import { resolveRunnerModel } from "./model-resolver.js";
 
 export class CodexRunner implements Runner {
   readonly name = "codex" as const;
 
+  constructor(private readonly defaultOptions: RunnerOptions = {}) {}
+
   async run(input: RunnerExecInput): Promise<RunnerExecResult> {
-    const model = resolveRunnerModel("codex", input.options.model);
-    const timeoutMs = input.options.timeoutMs ?? 300_000;
+    const options = { ...this.defaultOptions, ...input.options };
+    const model = resolveRunnerModel("codex", options.model);
     const start = Date.now();
 
     const lastMessageFile = join(input.cwd, ".qrspi", "_codex_last_message.txt");
@@ -21,7 +24,7 @@ export class CodexRunner implements Runner {
       "--color", "never",
     ];
     if (model) args.push("--model", model);
-    if (input.options.codexProfile) args.push("--profile", input.options.codexProfile);
+    if (options.codexProfile) args.push("--profile", options.codexProfile);
 
     return new Promise((resolve) => {
       const proc = spawn("codex", args, { cwd: input.cwd });
@@ -31,22 +34,18 @@ export class CodexRunner implements Runner {
       proc.stdin.write(input.prompt);
       proc.stdin.end();
 
-      proc.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
-      proc.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
-
-      const timer = setTimeout(() => {
-        proc.kill();
-        resolve({
-          stdout,
-          stderr: stderr + "\n[TIMEOUT]",
-          exitCode: -1,
-          durationMs: Date.now() - start,
-          meta: { runner: "codex", model, timed_out: true },
-        });
-      }, timeoutMs);
+      proc.stdout.on("data", (d: Buffer) => {
+        const chunk = d.toString();
+        stdout += chunk;
+        appendLiveOutput(options.liveStdoutPath, chunk);
+      });
+      proc.stderr.on("data", (d: Buffer) => {
+        const chunk = d.toString();
+        stderr += chunk;
+        appendLiveOutput(options.liveStderrPath, chunk);
+      });
 
       proc.on("close", async (code) => {
-        clearTimeout(timer);
         let lastMessage = stdout;
         try {
           lastMessage = await readFile(lastMessageFile, "utf-8");

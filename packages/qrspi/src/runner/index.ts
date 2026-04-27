@@ -6,14 +6,14 @@ import { resolveRunnerName, resolveRunnerModel, supportedRunnerNames } from "./m
 
 export { resolveRunnerName, resolveRunnerModel, supportedRunnerNames };
 
-export function buildRunner(name: RunnerName, _options?: RunnerOptions): Runner {
+export function buildRunner(name: RunnerName, options: RunnerOptions = {}): Runner {
   switch (name) {
     case "mock":
-      return new MockRunner();
+      return new MockRunner(options);
     case "claude":
-      return new ClaudeRunner();
+      return new ClaudeRunner(options);
     case "codex":
-      return new CodexRunner();
+      return new CodexRunner(options);
     default:
       throw new Error(`Unknown runner: ${name as string}. Supported: ${supportedRunnerNames().join(", ")}`);
   }

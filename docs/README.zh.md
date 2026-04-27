@@ -137,10 +137,15 @@ qrspi run --feature user-authentication --runner mock --max-stages 1
 
 ```bash
 # 查看 Q 阶段的指令和验证标准
-qrspi prompt Q
+qrspi prompt render Q --feature user-authentication
 
 # 渲染完整 prompt（可以直接给 Claude Code / Codex CLI 使用）
-qrspi prompt Q --render --input "添加用户认证功能，支持邮箱+密码和 OAuth"
+qrspi prompt render Q --feature user-authentication --input "添加用户认证功能，支持邮箱+密码和 OAuth"
+
+# 导出基础 Prompt 模板供审阅，不包含当前 workflow 的上下文或用户输入
+qrspi prompt export --lang zh --out qrspi-prompts.md
+qrspi prompt export Q --lang zh --out Q_prompt.md
+qrspi prompt export --lang zh --split --out qrspi-prompts/
 ```
 
 ### 3. 保存产物并推进
@@ -164,8 +169,10 @@ qrspi run --input "添加用户认证功能，支持邮箱+密码和 OAuth"
 # 默认模型: gpt-5.4
 qrspi run --runner codex --input "添加用户认证功能，支持邮箱+密码和 OAuth"
 
-# 如果担心 Claude 长时间无响应，可以设置超时（毫秒）
-qrspi run --input "添加用户认证功能" --timeout 180000
+# 真实 runner 的长任务默认不设置超时。
+# 可以在当前 run 目录中查看实时输出：
+# .qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/live_stdout.txt
+# .qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/live_stderr.txt
 
 # 也可以显式指定模型
 qrspi run --input "添加用户认证功能" --model kimi-for-coding
@@ -249,7 +256,7 @@ qrspi budget
 **规则:**
 - Context 利用率保持在 **40% 以下**
 - 达到 **60%** 时强制切换 Session
-- 进度持久化到磁盘，新 Session 只加载当前阶段所需
+- 进度持久化到磁盘，新 Session 加载当前阶段所需的完整前置产物
 
 ### 2. 垂直切片（优于水平分层）
 
@@ -423,7 +430,7 @@ qrspi-agent/
 
 > 达到 60% 时，开始新会话。这与 context window 有多大无关。
 
-**实践:** 每个垂直切片后保存进度，启动只加载当前所需内容的新 Session。
+**实践:** 每个垂直切片后保存进度，启动加载当前阶段所需完整前置产物的新 Session。
 
 ### 洞察二: 垂直切片优于水平分层
 

@@ -136,10 +136,11 @@ export interface StageValidator {
 }
 
 export interface RunnerOptions {
-  timeoutMs?: number;
   model?: string;
   codexProfile?: string;
   codexConfig?: string;
+  liveStdoutPath?: string;
+  liveStderrPath?: string;
 }
 
 export interface RunnerExecInput {
@@ -168,7 +169,6 @@ export interface CliGlobalOptions {
   featureId?: string;
   runner?: RunnerName;
   model?: string;
-  timeout?: number;
   codexProfile?: string;
   codexConfig?: string;
   lang?: Lang;
@@ -190,8 +190,12 @@ export interface RunCommandOptions extends FeatureScopedCommandOptions {
 
 export interface PromptCommandOptions extends FeatureScopedCommandOptions {
   stage: StageCode;
-  render: boolean;
   input?: string;
+}
+
+export interface PromptExportCommandOptions extends CliGlobalOptions {
+  out?: string;
+  split?: boolean;
 }
 
 export interface RejectCommandOptions extends FeatureScopedCommandOptions {

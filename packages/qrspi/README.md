@@ -25,7 +25,8 @@ npx qrspi-agent --help
 
 ```bash
 qrspi init user-authentication --root .
-qrspi prompt Q --render --input "Add user authentication with email+password and OAuth"
+qrspi prompt render Q --feature user-authentication --input "Add user authentication with email+password and OAuth"
+qrspi prompt export --out qrspi-prompts.md
 qrspi run --input "Add user authentication with email+password and OAuth"
 qrspi status
 ```
@@ -44,6 +45,7 @@ qrspi run --feature user-authentication --runner mock --max-stages 1
 - Stage validation and structured parsing
 - Claude Code, Codex CLI, and mock runners
 - English and Chinese prompt rendering
+- Prompt template export for review (`qrspi prompt export`)
 - Multiple workflow selection via `--feature <id>`
 - Gate rejection via `qrspi reject` and workflow rollback via `qrspi rewind <stage>`
 
@@ -54,7 +56,9 @@ qrspi init <feature_id> --root .
 qrspi list --root .
 qrspi status --root . --feature <feature_id>
 qrspi stage --root . --feature <feature_id>
-qrspi prompt Q --render --root . --feature <feature_id> --input "requirement"
+qrspi prompt render Q --root . --feature <feature_id> --input "requirement"
+qrspi prompt export --root . --lang zh --out qrspi-prompts.md
+qrspi prompt export --root . --lang zh --split --out qrspi-prompts/
 qrspi run --root . --feature <feature_id> --runner mock --max-stages 1
 qrspi approve --root . --feature <feature_id>
 qrspi reject --root . --feature <feature_id> --comment "needs changes"

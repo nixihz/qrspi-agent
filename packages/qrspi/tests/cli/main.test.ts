@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -164,6 +164,7 @@ describe("cli main feature scoping", () => {
       "node",
       "qrspi",
       "prompt",
+      "render",
       "R",
       "--root",
       projectRoot,
@@ -181,9 +182,88 @@ describe("cli main feature scoping", () => {
     ]);
 
     expect(promptResult.code).toBe(0);
-    expect(promptResult.stdout).toContain("Use --render to render the actual prompt");
+    expect(promptResult.stdout).toContain("# Stage: R");
     expect(contextResult.code).toBe(0);
     expect(contextResult.stdout).toContain("Current Stage: R");
+  });
+
+  it("exports all base prompt templates without a workflow", async () => {
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "prompt",
+      "export",
+      "--root",
+      projectRoot,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("QRSPI Prompt Templates");
+    expect(result.stdout).toContain("# Stage: Q");
+    expect(result.stdout).toContain("# Stage: PR");
+    expect(result.stdout).toContain("without workflow-specific context artifacts or user input");
+  });
+
+  it("exports split Chinese prompt templates to a directory", async () => {
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "prompt",
+      "export",
+      "--root",
+      projectRoot,
+      "--lang",
+      "zh",
+      "--out",
+      "prompt-templates",
+      "--split",
+    ]);
+
+    const outputDir = join(projectRoot, "prompt-templates");
+    const filenames = readdirSync(outputDir).sort();
+    const qPrompt = readFileSync(join(outputDir, "Q_prompt.zh.md"), "utf-8");
+
+    expect(result.code).toBe(0);
+    expect(filenames).toHaveLength(8);
+    expect(filenames).toContain("PR_prompt.zh.md");
+    expect(qPrompt).toContain("# 阶段: Q");
+    expect(qPrompt).toContain("技术问题清单");
+  });
+
+  it("keeps legacy prompt render syntax working", async () => {
+    await createWorkflow(projectRoot, "legacy-render", "Q");
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "prompt",
+      "Q",
+      "--render",
+      "--root",
+      projectRoot,
+      "--feature",
+      "legacy-render",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("# Stage: Q");
+    expect(result.stdout).toContain("Technical Questions");
+  });
+
+  it("keeps legacy prompts export syntax working", async () => {
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "prompts",
+      "export",
+      "Q",
+      "--root",
+      projectRoot,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Stages: Q");
+    expect(result.stdout).toContain("# Stage: Q");
   });
 
   it("accepts feature id for run and advances only the selected workflow", async () => {
@@ -209,6 +289,40 @@ describe("cli main feature scoping", () => {
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("Feature: beta");
     expect(workflowState?.currentStage).toBe("R");
+  });
+
+  it("passes --model through run command to runner metadata", async () => {
+    await createWorkflow(projectRoot, "model-me", "Q");
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "run",
+      "--root",
+      projectRoot,
+      "--feature",
+      "model-me",
+      "--runner",
+      "mock",
+      "--model",
+      "custom-model",
+      "--max-stages",
+      "1",
+    ]);
+
+    const runsDir = join(projectRoot, ".qrspi", "model-me", "runs");
+    const [runDirName] = readdirSync(runsDir).sort();
+    expect(runDirName).toBeDefined();
+    const meta = JSON.parse(
+      readFileSync(join(runsDir, runDirName!, "runner_meta.json"), "utf-8"),
+    ) as { model?: string };
+    const liveStdout = readFileSync(join(runsDir, runDirName!, "live_stdout.txt"), "utf-8");
+    const liveStderr = readFileSync(join(runsDir, runDirName!, "live_stderr.txt"), "utf-8");
+
+    expect(result.code).toBe(0);
+    expect(meta.model).toBe("custom-model");
+    expect(liveStdout).toContain("Technical Questions");
+    expect(liveStderr).toBe("");
   });
 
   it("accepts feature id for approve and reject", async () => {

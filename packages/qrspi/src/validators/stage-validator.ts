@@ -31,10 +31,14 @@ function checkMinLength(content: string, minLines: number, stage: StageCode): Va
   return null;
 }
 
-function checkHeadings(content: string, required: string[]): ValidationIssue[] {
-  return required
-    .filter((h) => !content.includes(h))
-    .map((h) => ({ severity: "error" as const, message: `Missing required section: ${h}` }));
+function hasHeading(content: string, pattern: RegExp): boolean {
+  return content
+    .split("\n")
+    .some((line) => /^#{1,6}\s+/.test(line.trim()) && pattern.test(line.trim()));
+}
+
+function countMatches(content: string, pattern: RegExp): number {
+  return content.match(pattern)?.length ?? 0;
 }
 
 function validateQ(content: string): ValidationResult {
@@ -70,12 +74,54 @@ function validateD(content: string): ValidationResult {
   const lenIssue = checkMinLength(content, 20, "D");
   if (lenIssue) issues.push(lenIssue);
 
-  const headingIssues = checkHeadings(content, ["## 1.", "## 2.", "## 3."]);
-  issues.push(...headingIssues);
+  if (!hasHeading(content, /^#\s+(Design Discussion|设计讨论)\b/i)) {
+    issues.push({
+      severity: "error",
+      message: "D stage output must be a Design Discussion document",
+    });
+  }
 
-  const alternativeCount = (content.match(/alternative/gi) ?? []).length;
-  if (alternativeCount < 2) {
+  const requiredSections: Array<[string, RegExp]> = [
+    ["Current State", /^#{2,6}\s+(?:\d+\.\s*)?(Current State|Current System|As-Is|现状|当前状态)\b/i],
+    ["Target State", /^#{2,6}\s+(?:\d+\.\s*)?(Target State|Desired State|To-Be|目标状态|目标)\b/i],
+    ["Design Decisions", /^#{2,6}\s+(?:\d+\.\s*)?(Design Decisions?|Decisions?|设计决策|决策)\b/i],
+  ];
+
+  for (const [name, pattern] of requiredSections) {
+    if (!hasHeading(content, pattern)) {
+      issues.push({
+        severity: "error",
+        message: `Missing required design section: ${name}`,
+      });
+    }
+  }
+
+  const decisionCount = countMatches(content, /^###\s+(?:Decision|决策)\s+\d+\s*:/gim);
+  if (decisionCount < 1) {
+    issues.push({ severity: "error", message: "Missing design decision entries" });
+  }
+
+  const recommendedCount = countMatches(content, /\*\*(?:Recommended|Recommendation|推荐方案|推荐)\*\*\s*:/gi);
+  if (recommendedCount < 1) {
+    issues.push({ severity: "error", message: "Missing recommended option in design decisions" });
+  }
+
+  const alternativeCount = countMatches(content, /\*\*(?:Alternative(?:\s+[A-Z])?|备选方案|替代方案)\*\*\s*:/gi);
+  if (alternativeCount < 1) {
     issues.push({ severity: "warning", message: "Too few alternatives presented" });
+  }
+
+  const confirmationCount = countMatches(content, /\*\*(?:Needs? Confirmation|Open Questions?|需要确认|待确认)\*\*\s*:/gi);
+  if (confirmationCount < 1) {
+    issues.push({ severity: "warning", message: "Missing confirmation questions in design decisions" });
+  }
+
+  if (!hasHeading(content, /^#{2,6}\s+(?:\d+\.\s*)?(Architecture Constraints?|Constraints?|架构约束|约束)\b/i)) {
+    issues.push({ severity: "warning", message: "Missing architecture constraints section" });
+  }
+
+  if (!hasHeading(content, /^#{2,6}\s+(?:\d+\.\s*)?(Risks?(?: and Mitigations)?|Mitigations?|风险|风险与缓解)\b/i)) {
+    issues.push({ severity: "warning", message: "Missing risks and mitigations section" });
   }
 
   return makeResult("D", issues);

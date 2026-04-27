@@ -1,6 +1,6 @@
 {
   "name": "qrspi-agent",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Structured programming agent workflow CLI for Node.js and TypeScript",
   "type": "module",
   "main": "./dist/index.js",

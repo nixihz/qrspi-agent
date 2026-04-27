@@ -6,6 +6,7 @@ import type {
   StageArtifact,
   ValidationResult,
   Runner,
+  RunnerOptions,
   StageCode,
   RunCommandOptions,
   ApprovalRecord,
@@ -37,7 +38,6 @@ import { resolveFileStoreLayout, buildRunDirName } from "../storage/path-resolve
 import { buildContextPack } from "../context/context-builder.js";
 import { createPromptRegistry, renderStagePrompt } from "../prompts/template-registry.js";
 import { validateStageArtifact } from "../validators/stage-validator.js";
-import { resolveRunnerModel } from "../runner/index.js";
 import { parseStageOutput } from "../parsers/artifact-parser.js";
 
 export interface RunSingleStageResult {
@@ -54,6 +54,7 @@ export async function runSingleStage(
   runner: Runner,
   userInput?: string,
   lang: Lang = "en",
+  runnerOptions: RunnerOptions = {},
 ): Promise<RunSingleStageResult> {
   const stage = workflowState.currentStage;
   const attempt = (engineState.stage_attempts[stage] ?? 0) + 1;
@@ -80,13 +81,17 @@ export async function runSingleStage(
 
     await writeRunFile(runDir, "prompt.md", prompt);
     await writeRunFile(runDir, "context.json", contextPack);
+    await writeRunFile(runDir, "live_stdout.txt", "");
+    await writeRunFile(runDir, "live_stderr.txt", "");
 
     const runnerResult = await runner.run({
       prompt,
       cwd: config.projectRoot,
       stage,
       options: {
-        model: resolveRunnerModel(runner.name),
+        ...runnerOptions,
+        liveStdoutPath: join(runDir, "live_stdout.txt"),
+        liveStderrPath: join(runDir, "live_stderr.txt"),
       },
     });
 
@@ -95,6 +100,8 @@ export async function runSingleStage(
     await writeRunFile(runDir, "runner_meta.json", {
       ok: runnerResult.exitCode === 0,
       exit_code: runnerResult.exitCode,
+      live_stdout_file: join(runDir, "live_stdout.txt"),
+      live_stderr_file: join(runDir, "live_stderr.txt"),
       ...runnerResult.meta,
     });
 
@@ -233,6 +240,11 @@ export async function runWorkflow(
   const results: RunSingleStageResult[] = [];
   const maxStages = options.maxStages ?? 99;
   let stagesRun = 0;
+  const runnerOptions: RunnerOptions = {
+    model: options.model,
+    codexProfile: options.codexProfile,
+    codexConfig: options.codexConfig,
+  };
 
   while (stagesRun < maxStages) {
     const stage = workflowState.currentStage;
@@ -264,6 +276,7 @@ export async function runWorkflow(
       runner,
       options.input,
       options.lang,
+      runnerOptions,
     );
 
     results.push(result);

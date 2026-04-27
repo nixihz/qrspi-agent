@@ -1,4 +1,5 @@
-import type { Runner, RunnerExecInput, RunnerExecResult } from "../workflow/types.js";
+import type { Runner, RunnerExecInput, RunnerExecResult, RunnerOptions } from "../workflow/types.js";
+import { appendLiveOutput } from "./live-output.js";
 import { resolveRunnerModel } from "./model-resolver.js";
 
 const MOCK_TEMPLATES: Record<string, string> = {
@@ -24,8 +25,8 @@ Implement the Node.js/TypeScript version of the qrspi CLI tool.
 - **Search direction**: qrspi/runner.py
 - **Blocking**: blocking
 
-### Q4: ContextBuilder summary strategy
-- **Goal**: Understand context truncation rules
+### Q4: ContextBuilder artifact loading strategy
+- **Goal**: Understand which previous-stage artifacts are loaded for each stage
 - **Search direction**: qrspi/context.py
 - **Blocking**: nice-to-have
 
@@ -254,10 +255,14 @@ Added TypeScript version of qrspi CLI under packages/qrspi/.
 export class MockRunner implements Runner {
   readonly name = "mock" as const;
 
+  constructor(private readonly defaultOptions: RunnerOptions = {}) {}
+
   async run(input: RunnerExecInput): Promise<RunnerExecResult> {
-    const model = resolveRunnerModel("mock", input.options.model);
+    const options = { ...this.defaultOptions, ...input.options };
+    const model = resolveRunnerModel("mock", options.model);
     const template = MOCK_TEMPLATES[input.stage] ?? `# Mock output for stage ${input.stage}\n\nPlaceholder content.`;
     const start = Date.now();
+    appendLiveOutput(options.liveStdoutPath, template);
 
     return {
       stdout: template,

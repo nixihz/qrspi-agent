@@ -88,6 +88,6 @@ describe("stage-schema", () => {
     expect(deps.map((d) => d.stage)).toContain("Q");
     expect(deps.map((d) => d.stage)).toContain("R");
     expect(deps[0].required).toBe(true);
-    expect(deps[0].summaryOnly).toBe(true);
+    expect(deps[0].summaryOnly).toBe(false);
   });
 });

@@ -6,8 +6,8 @@ function makeContext(stage: string): ContextPack {
   return {
     currentStage: stage as "Q",
     dependencies: [],
-    maxLinesPerArtifact: 40,
-    utilizationTarget: 0.8,
+    maxLinesPerArtifact: 0,
+    utilizationTarget: 0.4,
   };
 }
 

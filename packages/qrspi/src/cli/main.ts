@@ -1,16 +1,20 @@
 #!/usr/bin/env node
-import { Command } from "commander";
 import { createRequire } from "module";
-import { resolve, join } from "path";
+import { mkdir, writeFile } from "fs/promises";
+import { dirname, resolve, join } from "path";
 import { realpathSync } from "fs";
 import { fileURLToPath } from "url";
+
+import { Command } from "commander";
 
 import type {
   AdvanceCommandOptions,
   CliGlobalOptions,
   FeatureScopedCommandOptions,
   InitCommandOptions,
+  Lang,
   PromptCommandOptions,
+  PromptExportCommandOptions,
   ProjectConfig,
   RejectCommandOptions,
   RewindCommandOptions,
@@ -19,6 +23,7 @@ import type {
   SessionConfig,
   SliceAddCommandOptions,
   SliceDefinition,
+  ContextPack,
 } from "../workflow/types.js";
 import {
   initWorkflow,
@@ -59,7 +64,7 @@ import { buildContextPack } from "../context/context-builder.js";
 const require = createRequire(import.meta.url);
 const { version: VERSION } = require("../../package.json") as { version: string };
 
-function resolveLangFromEnv(): string {
+function resolveLangFromEnv(): Lang {
   const envLang = process.env.LANG ?? "";
   return envLang.startsWith("zh") ? "zh" : "en";
 }
@@ -135,6 +140,77 @@ function withFeatureOption(cmd: Command): Command {
   return cmd.option("--feature <id>", "Feature ID");
 }
 
+function createEmptyContext(stage: StageCode): ContextPack {
+  return {
+    currentStage: stage,
+    dependencies: [],
+    maxLinesPerArtifact: 0,
+    utilizationTarget: 0.4,
+  };
+}
+
+function renderPromptTemplateForExport(stage: StageCode, lang: Lang): string {
+  const registry = createPromptRegistry();
+  return renderStagePrompt(registry, {
+    featureId: "prompt-export",
+    stage,
+    context: createEmptyContext(stage),
+    lang,
+  });
+}
+
+function renderPromptTemplateBundle(stages: StageCode[], lang: Lang): string {
+  const title = lang === "zh" ? "QRSPI Prompt 模板" : "QRSPI Prompt Templates";
+  const description = lang === "zh"
+    ? "以下内容是各阶段的基础系统提示词模板，不包含具体 workflow 的上下文产物或用户输入。"
+    : "These are the base system prompt templates for each stage, without workflow-specific context artifacts or user input.";
+
+  const body = stages
+    .map((stage) => renderPromptTemplateForExport(stage, lang))
+    .join("\n\n---\n\n");
+
+  return [
+    `# ${title}`,
+    "",
+    description,
+    "",
+    `Stages: ${stages.join(", ")}`,
+    `Language: ${lang}`,
+    "",
+    "---",
+    "",
+    body,
+  ].join("\n");
+}
+
+function buildPromptExportFilename(stage: StageCode, lang: Lang): string {
+  return `${stage}_prompt.${lang}.md`;
+}
+
+function normalizeLegacyPromptArgs(argv: string[]): string[] {
+  const normalized = [...argv];
+
+  if (normalized[2] === "prompts" && normalized[3] === "export") {
+    normalized.splice(2, 2, "prompt", "export");
+    return normalized;
+  }
+
+  const legacyStage = normalized[3];
+  if (
+    normalized[2] === "prompt" &&
+    typeof legacyStage === "string" &&
+    isValidStageCode(legacyStage as StageCode)
+  ) {
+    const renderIndex = normalized.indexOf("--render");
+    if (renderIndex !== -1) {
+      normalized.splice(renderIndex, 1);
+      normalized.splice(3, 1, "render", legacyStage);
+    }
+  }
+
+  return normalized;
+}
+
 export async function handleInitCommand(opts: InitCommandOptions): Promise<number> {
   const config: SessionConfig = {
     featureId: opts.featureId,
@@ -193,13 +269,6 @@ export async function handlePromptCommand(opts: PromptCommandOptions): Promise<n
   }
 
   const registry = createPromptRegistry();
-  const template = registry.get(opts.stage);
-
-  if (!opts.render) {
-    print(`Stage ${opts.stage} prompt template registered. Use --render to render the actual prompt.`);
-    return 0;
-  }
-
   const context = await buildContextPack(opts.stage, config);
   const prompt = renderStagePrompt(registry, {
     featureId: config.featureId,
@@ -209,6 +278,53 @@ export async function handlePromptCommand(opts: PromptCommandOptions): Promise<n
     lang: opts.lang,
   });
   print(prompt);
+  return 0;
+}
+
+export async function handlePromptExportCommand(
+  opts: PromptExportCommandOptions,
+  stage?: string,
+): Promise<number> {
+  const lang = opts.lang ?? resolveLangFromEnv();
+  const projectConfig = resolveProjectConfig(opts);
+  const stages: StageCode[] = stage
+    ? [stage as StageCode]
+    : getStageOrder();
+
+  if (stage && !isValidStageCode(stage)) {
+    printErr(`[QRSPI] Invalid stage code: ${stage}`);
+    return 1;
+  }
+
+  if (opts.split && !opts.out) {
+    printErr("[QRSPI] --split requires --out <directory>");
+    return 1;
+  }
+
+  if (opts.split && opts.out) {
+    const outputDir = resolve(projectConfig.projectRoot, opts.out);
+    await mkdir(outputDir, { recursive: true });
+
+    for (const stageCode of stages) {
+      const filePath = join(outputDir, buildPromptExportFilename(stageCode, lang));
+      await writeFile(filePath, renderPromptTemplateForExport(stageCode, lang), "utf-8");
+      print(`[QRSPI] Exported prompt template: ${filePath}`);
+    }
+
+    return 0;
+  }
+
+  const content = renderPromptTemplateBundle(stages, lang);
+
+  if (!opts.out) {
+    print(content);
+    return 0;
+  }
+
+  const outputPath = resolve(projectConfig.projectRoot, opts.out);
+  await mkdir(dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, content, "utf-8");
+  print(`[QRSPI] Exported prompt templates: ${outputPath}`);
   return 0;
 }
 
@@ -454,7 +570,6 @@ export async function main(argv?: string[]): Promise<number> {
       .option("--root <path>", "Project root directory", ".")
       .option("--runner <name>", "Runner type (claude/codex/mock)")
       .option("--model <model>", "Model name")
-      .option("--timeout <ms>", "Timeout in milliseconds", parseInt)
       .option("--lang <code>", "Language (en/zh)", resolveLangFromEnv());
 
   const featureScopedOpts = (cmd: Command) => withFeatureOption(globalOpts(cmd));
@@ -495,14 +610,26 @@ export async function main(argv?: string[]): Promise<number> {
     process.exitCode = code;
   });
 
+  const promptCmd = program.command("prompt").description("Render and export prompts");
+
   featureScopedOpts(
-    program
-      .command("prompt <stage>")
-      .description("Render stage prompt")
-      .option("--render", "Render the actual prompt", false)
+    promptCmd
+      .command("render <stage>")
+      .description("Render a workflow-aware stage prompt")
       .option("--input <text>", "User input")
   ).action(async (stage: string, opts: PromptCommandOptions) => {
     const code = await handlePromptCommand({ ...opts, stage: stage as StageCode });
+    process.exitCode = code;
+  });
+
+  globalOpts(
+    promptCmd
+      .command("export [stage]")
+      .description("Export base prompt templates for all stages or one stage")
+      .option("--out <path>", "Output markdown file, or output directory when --split is used")
+      .option("--split", "Write one markdown file per stage", false)
+  ).action(async (stage: string | undefined, opts: PromptExportCommandOptions) => {
+    const code = await handlePromptExportCommand(opts, stage);
     process.exitCode = code;
   });
 
@@ -612,7 +739,7 @@ export async function main(argv?: string[]): Promise<number> {
     });
 
   try {
-    await program.parseAsync(argv ?? process.argv);
+    await program.parseAsync(normalizeLegacyPromptArgs(argv ?? process.argv));
   } catch (err) {
     printErr(`[QRSPI] Error: ${err instanceof Error ? err.message : String(err)}`);
     return 1;

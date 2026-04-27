@@ -30,6 +30,19 @@ describe("runner", () => {
     expect(runner.name).toBe("mock");
   });
 
+  it("passes buildRunner model options to runner execution", async () => {
+    const runner = buildRunner("mock", { model: "custom-model" });
+
+    const result = await runner.run({
+      prompt: "test prompt",
+      cwd: "/tmp",
+      stage: "Q",
+      options: {},
+    });
+
+    expect(result.meta.model).toBe("custom-model");
+  });
+
   it("mock runner executes", async () => {
     const runner = new MockRunner();
     const input: RunnerExecInput = {

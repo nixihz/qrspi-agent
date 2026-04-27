@@ -10,10 +10,12 @@ import type {
 import { getStageDependencies } from "../workflow/stage-schema.js";
 import { resolveFileStoreLayout, buildArtifactFilename } from "../storage/path-resolver.js";
 
-const DEFAULT_MAX_LINES = 40;
-const DEFAULT_UTILIZATION = 0.8;
+const NO_ARTIFACT_LINE_LIMIT = 0;
+const DEFAULT_UTILIZATION = 0.4;
 
-export function summarizeArtifact(content: string, maxLines: number = DEFAULT_MAX_LINES): string {
+export function summarizeArtifact(content: string, maxLines: number = NO_ARTIFACT_LINE_LIMIT): string {
+  if (maxLines <= 0) return content;
+
   const lines = content.split("\n");
   if (lines.length <= maxLines) return content;
 
@@ -24,7 +26,7 @@ export function summarizeArtifact(content: string, maxLines: number = DEFAULT_MA
 export async function buildContextPack(
   stage: StageCode,
   config: SessionConfig,
-  maxLinesPerArtifact: number = DEFAULT_MAX_LINES,
+  maxLinesPerArtifact: number = NO_ARTIFACT_LINE_LIMIT,
   utilizationTarget: number = DEFAULT_UTILIZATION,
 ): Promise<ContextPack> {
   const layout = resolveFileStoreLayout(config);
@@ -62,7 +64,7 @@ export function formatContextForPrompt(context: ContextPack, lang: Lang = "en"):
   if (context.dependencies.length === 0) return "";
 
   const title = lang === "zh" ? "前置阶段上下文" : "Previous Stage Context";
-  const summaryLabel = lang === "zh" ? "产物摘要" : "Artifact Summary";
+  const summaryLabel = lang === "zh" ? "产物内容" : "Artifact Content";
 
   const parts: string[] = [`## ${title}\n`];
   for (const dep of context.dependencies) {
