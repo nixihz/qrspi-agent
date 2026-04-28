@@ -5,6 +5,40 @@ import type { Runner, RunnerExecInput, RunnerExecResult, RunnerOptions } from ".
 import { appendLiveOutput } from "./live-output.js";
 import { resolveRunnerModel } from "./model-resolver.js";
 
+const BENIGN_CODEX_STDERR_PATTERNS = [
+  "WARN codex_analytics::client: events failed",
+  "WARN codex_core::plugins::manager: failed to warm featured plugin ids cache",
+  "WARN codex_rmcp_client::stdio_server_launcher: Failed to terminate MCP process group",
+  "WARN codex_core_plugins::manifest: ignoring interface.defaultPrompt",
+];
+
+export function sanitizeCodexStderr(stderr: string): string {
+  const lines = stderr.split(/\r?\n/);
+  const kept: string[] = [];
+  let skippingHtmlBlock = false;
+
+  for (const line of lines) {
+    if (skippingHtmlBlock) {
+      if (line.includes("</html>")) {
+        skippingHtmlBlock = false;
+      }
+      continue;
+    }
+
+    const isBenign = BENIGN_CODEX_STDERR_PATTERNS.some((pattern) => line.includes(pattern));
+    if (isBenign) {
+      if (line.includes("<html>") && !line.includes("</html>")) {
+        skippingHtmlBlock = true;
+      }
+      continue;
+    }
+
+    kept.push(line);
+  }
+
+  return kept.join("\n");
+}
+
 export function buildCodexExecArgs(
   cwd: string,
   lastMessageFile: string,
@@ -14,6 +48,9 @@ export function buildCodexExecArgs(
   const args = [
     "exec",
     "--ephemeral",
+    "--disable", "plugins",
+    "--disable", "general_analytics",
+    "--json",
     "--full-auto",
     "--cd", cwd,
     "--output-last-message", lastMessageFile,
@@ -63,12 +100,14 @@ export class CodexRunner implements Runner {
         } catch {
           // fall back to stdout
         }
+        const sanitizedStderr = sanitizeCodexStderr(stderr);
+
         resolve({
           stdout: lastMessage,
-          stderr,
+          stderr: sanitizedStderr,
           exitCode: code ?? 0,
           durationMs: Date.now() - start,
-          meta: { runner: "codex", model },
+          meta: { runner: "codex", model, live_stdout_format: "codex-jsonl" },
         });
       });
     });
