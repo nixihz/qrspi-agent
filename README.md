@@ -122,6 +122,42 @@ It guides agents to prefer the `qrspi` CLI over manually simulating the workflow
 
 Installing the skill does not install the `qrspi` CLI. If `qrspi` is not on your `PATH`, install the npm package first or use `npx qrspi-agent`.
 
+## Codex Plugin Preview
+
+This repository can also be used as a Codex plugin preview. The plugin layer is a thin cockpit around the existing CLI engine:
+
+```text
+User intent
+  -> Codex Plugin
+  -> qrspi-cli-workflow skill
+  -> QRSPI MCP tools
+  -> qrspi CLI state machine
+  -> dashboard preview for gates and progress
+```
+
+Preview components:
+
+- `.codex-plugin/plugin.json` declares the plugin metadata, skills, MCP server, hooks, app, starter prompts, and assets.
+- `skills/qrspi-cli-workflow` keeps Codex aligned with the real `qrspi` CLI and gate rules.
+- `packages/qrspi-mcp` exposes structured tools for `list`, `status`, `init`, `run`, and approve/reject.
+- `apps/qrspi-dashboard` is a lightweight dashboard preview for workflow status, artifacts, run logs, and gate actions.
+- `hooks/qrspi-hooks.json` nudges QRSPI-related requests toward the skill/MCP path without skipping human gates.
+
+Build the preview packages:
+
+```bash
+npm install
+npm run build
+```
+
+The MCP server is configured in `.mcp.json` and runs:
+
+```bash
+node ./packages/qrspi-mcp/dist/index.js
+```
+
+The MCP layer does not implement a second state machine and does not write `.qrspi` state files directly. The `qrspi` CLI remains the source of truth, and `D`, `S`, and `PR` gates still require explicit human approval.
+
 ### 1. Initialize Workflow
 
 ```bash

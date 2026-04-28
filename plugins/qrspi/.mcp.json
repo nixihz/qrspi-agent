@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "qrspi": {
+      "command": "node",
+      "args": [
+        "../../packages/qrspi-mcp/dist/index.js"
+      ],
+      "env": {
+        "QRSPI_PROJECT_ROOT": "."
+      }
+    }
+  }
+}

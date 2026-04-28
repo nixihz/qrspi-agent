@@ -1,0 +1,27 @@
+{
+  "version": "0.1.0",
+  "hooks": [
+    {
+      "name": "qrspi-intent-reminder",
+      "description": "Guide Codex toward the QRSPI skill and MCP tools for workflow-related requests.",
+      "triggers": [
+        "QRSPI",
+        "CRISPY",
+        ".qrspi",
+        "stage",
+        "gate",
+        "开始一个 feature",
+        "推进这个需求",
+        "生成 PR",
+        "查看当前阶段",
+        "审批设计"
+      ],
+      "instructions": [
+        "Use the qrspi-cli-workflow skill for QRSPI workflow operations.",
+        "Prefer the qrspi MCP tools when they are available.",
+        "Do not manually modify .qrspi state files.",
+        "Do not bypass D, S, or PR human gates."
+      ]
+    }
+  ]
+}

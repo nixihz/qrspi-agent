@@ -7,10 +7,12 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace=packages/qrspi",
+    "build": "npm run build --workspaces",
+    "build:cli": "npm run build --workspace=packages/qrspi",
+    "build:mcp": "npm run build --workspace=@qrspi/mcp",
     "test": "npm test --workspace=packages/qrspi",
-    "lint": "npm run lint --workspace=packages/qrspi",
-    "qrspi": "npm run build && node packages/qrspi/dist/cli/main.js"
+    "lint": "npm run lint --workspaces",
+    "qrspi": "npm run build:cli && node packages/qrspi/dist/cli/main.js"
   },
   "keywords": [
     "qrspi",

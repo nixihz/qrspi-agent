@@ -1,0 +1,47 @@
+{
+  "name": "qrspi",
+  "version": "0.1.0-preview",
+  "description": "Structured programming workflow cockpit for AI coding agents.",
+  "author": {
+    "name": "Brian Xie",
+    "url": "https://github.com/nixihz"
+  },
+  "homepage": "https://github.com/nixihz/qrspi-agent#codex-plugin-preview",
+  "repository": "https://github.com/nixihz/qrspi-agent",
+  "license": "MIT",
+  "keywords": [
+    "qrspi",
+    "crispy",
+    "ai-agent",
+    "workflow",
+    "codex-plugin"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks/qrspi-hooks.json",
+  "mcpServers": "./.mcp.json",
+  "apps": "./apps/qrspi-dashboard/.app.json",
+  "interface": {
+    "displayName": "QRSPI",
+    "shortDescription": "Structured programming workflow for AI coding agents",
+    "longDescription": "QRSPI brings the CLI workflow engine, Codex skill, MCP tools, hooks, and a dashboard preview into one structured delivery cockpit for feature work from requirement to PR.",
+    "developerName": "Brian Xie",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write",
+      "Run Commands"
+    ],
+    "websiteURL": "https://github.com/nixihz/qrspi-agent",
+    "brandColor": "#145C57",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png",
+    "screenshots": [
+      "./assets/screenshot-dashboard.png"
+    ],
+    "defaultPrompt": [
+      "Start a QRSPI workflow for this feature.",
+      "Show the current QRSPI stage.",
+      "Review the current QRSPI gate artifact."
+    ]
+  }
+}
