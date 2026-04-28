@@ -4,6 +4,8 @@ export type StageKind = "alignment" | "execution";
 
 export type RunnerName = "claude" | "codex" | "mock";
 
+export type CliOutputFormat = "text" | "json";
+
 export type SessionStatus =
   | "idle"
   | "ready"
@@ -66,6 +68,16 @@ export interface ApprovalRecord {
   comment?: string;
 }
 
+export interface GateReviewRecord {
+  stage: StageCode;
+  decision: "approved" | "rejected";
+  recordedAt: string;
+  sourceFile?: string;
+  reviewPath?: string;
+  note?: string;
+  feedback?: string;
+}
+
 export interface EngineRunRecord {
   stage: StageCode;
   attempt: number;
@@ -80,6 +92,7 @@ export interface EngineState {
   currentStage: StageCode;
   status: SessionStatus;
   approvals: ApprovalRecord[];
+  gate_reviews?: GateReviewRecord[];
   stage_attempts: Partial<Record<StageCode, number>>;
   history: EngineRunRecord[];
   lastError?: string;
@@ -180,6 +193,8 @@ export interface CliGlobalOptions {
   codexProfile?: string;
   codexConfig?: string;
   lang?: Lang;
+  output?: CliOutputFormat;
+  json?: boolean;
 }
 
 export interface FeatureScopedCommandOptions extends CliGlobalOptions {
@@ -194,6 +209,7 @@ export interface RunCommandOptions extends FeatureScopedCommandOptions {
   input?: string;
   maxStages?: number;
   noStopAtGate?: boolean;
+  includeRunnerOutput?: boolean;
 }
 
 export interface PromptCommandOptions extends FeatureScopedCommandOptions {
@@ -208,6 +224,11 @@ export interface PromptExportCommandOptions extends CliGlobalOptions {
 
 export interface RejectCommandOptions extends FeatureScopedCommandOptions {
   comment?: string;
+  feedbackFile?: string;
+}
+
+export interface ApproveCommandOptions extends FeatureScopedCommandOptions {
+  noteFile?: string;
 }
 
 export interface RewindCommandOptions extends FeatureScopedCommandOptions {
@@ -257,4 +278,5 @@ export interface FileStoreLayout {
   sessionsDir: string;
   structuredDir: string;
   promptsDir: string;
+  gateReviewsDir: string;
 }

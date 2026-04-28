@@ -10,7 +10,7 @@ import type {
   StageCode,
   SessionStatus,
 } from "../workflow/types.js";
-import { resolveFileStoreLayout, buildArtifactFilename } from "./path-resolver.js";
+import { resolveFileStoreLayout, buildArtifactFilename, buildGateReviewFilename } from "./path-resolver.js";
 import { getStageName } from "../workflow/stage-schema.js";
 
 async function ensureDir(dir: string): Promise<void> {
@@ -50,6 +50,7 @@ export async function initializeSessionDirectories(
   await ensureDir(layout.sessionsDir);
   await ensureDir(layout.structuredDir);
   await ensureDir(layout.promptsDir);
+  await ensureDir(layout.gateReviewsDir);
   return layout;
 }
 
@@ -101,6 +102,7 @@ export async function readEngineState(
     currentStage: raw.currentStage ?? "Q",
     status: raw.status ?? "idle",
     approvals: raw.approvals ?? [],
+    gate_reviews: raw.gate_reviews ?? [],
     stage_attempts: raw.stage_attempts ?? {},
     history: raw.history ?? [],
     lastError: raw.lastError ?? "",
@@ -189,6 +191,19 @@ export async function writeRunFile(
   }
 }
 
+export async function writeGateReviewFile(
+  config: SessionConfig,
+  stage: StageCode,
+  decision: "approved" | "rejected",
+  content: string,
+): Promise<string> {
+  const layout = resolveFileStoreLayout(config);
+  await ensureDir(layout.gateReviewsDir);
+  const reviewPath = join(layout.gateReviewsDir, buildGateReviewFilename(stage, decision));
+  await writeFile(reviewPath, content, "utf-8");
+  return reviewPath;
+}
+
 export function createInitialWorkflowState(config: SessionConfig): WorkflowState {
   const now = new Date().toISOString();
   return {
@@ -207,6 +222,7 @@ export function createInitialEngineState(config: SessionConfig): EngineState {
     currentStage: "Q",
     status: "ready",
     approvals: [],
+    gate_reviews: [],
     stage_attempts: {},
     history: [],
     lastError: "",

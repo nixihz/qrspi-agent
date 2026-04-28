@@ -34,6 +34,7 @@ import {
   createRunDir,
   writeRunFile,
   transitionWorkflowState,
+  writeGateReviewFile,
 } from "../storage/file-repository.js";
 import { resolveFileStoreLayout, buildRunDirName } from "../storage/path-resolver.js";
 import { buildContextPack } from "../context/context-builder.js";
@@ -387,6 +388,7 @@ export async function approveCurrentStage(
   stage?: StageCode,
   approver?: string,
   comment?: string,
+  noteFile?: string,
 ): Promise<{ workflowState: WorkflowState; engineState: EngineState }> {
   const workflowState =
     (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
@@ -407,10 +409,24 @@ export async function approveCurrentStage(
   };
 
   const next = getNextStage(targetStage);
+  const reviewPath = comment
+    ? await writeGateReviewFile(config, targetStage, "approved", comment)
+    : undefined;
 
   const newEngineState: EngineState = {
     ...engineState,
     approvals: [...engineState.approvals, approval],
+    gate_reviews: [
+      ...(engineState.gate_reviews ?? []),
+      {
+        stage: targetStage,
+        decision: "approved",
+        recordedAt: approval.approvedAt,
+        sourceFile: noteFile,
+        reviewPath,
+        note: comment,
+      },
+    ],
     currentStage: next ?? targetStage,
     status: next ? "ready" : "completed",
     updatedAt: new Date().toISOString(),
@@ -431,6 +447,7 @@ export async function rejectCurrentStage(
   config: SessionConfig,
   stage?: StageCode,
   comment?: string,
+  feedbackFile?: string,
 ): Promise<{ workflowState: WorkflowState; engineState: EngineState }> {
   const workflowState =
     (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
@@ -453,11 +470,27 @@ export async function rejectCurrentStage(
     throw new Error(`Stage ${targetStage} is not waiting for approval`);
   }
 
+  const recordedAt = new Date().toISOString();
+  const reviewPath = comment
+    ? await writeGateReviewFile(config, targetStage, "rejected", comment)
+    : undefined;
+
   const newEngineState: EngineState = {
     ...engineState,
     currentStage: targetStage,
     status: "ready",
     lastError: comment ?? `Stage ${targetStage} rejected; ready to regenerate`,
+    gate_reviews: [
+      ...(engineState.gate_reviews ?? []),
+      {
+        stage: targetStage,
+        decision: "rejected",
+        recordedAt,
+        sourceFile: feedbackFile,
+        reviewPath,
+        feedback: comment,
+      },
+    ],
     history: engineState.history.filter(
       (entry) => !(entry.stage === targetStage && entry.success),
     ),

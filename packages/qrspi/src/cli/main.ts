@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createRequire } from "module";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, resolve, join } from "path";
 import { realpathSync } from "fs";
 import { fileURLToPath } from "url";
@@ -9,6 +9,7 @@ import { Command } from "commander";
 
 import type {
   AdvanceCommandOptions,
+  ApproveCommandOptions,
   CliGlobalOptions,
   FeatureScopedCommandOptions,
   InitCommandOptions,
@@ -52,6 +53,17 @@ import {
   printErr,
 } from "./output.js";
 import {
+  buildApproveJson,
+  buildContextJson,
+  buildErrorJson,
+  buildListJson,
+  buildRejectJson,
+  buildRunJson,
+  buildStageJson,
+  buildStatusJson,
+  printJson,
+} from "./json-output.js";
+import {
   getStageOrder,
   getStageName,
   getStageDescription,
@@ -88,7 +100,10 @@ function createSessionConfig(
 
 async function resolveFeatureConfig(
   opts: FeatureScopedCommandOptions,
-): Promise<{ config?: SessionConfig; error?: string }> {
+): Promise<{
+  config?: SessionConfig;
+  error?: { code: string; message: string; feature?: string; features?: string[] };
+}> {
   const projectConfig = resolveProjectConfig(opts);
   const workflows = await listFeatures(projectConfig.projectRoot, projectConfig.outputDir);
   const availableFeatures = workflows.map((workflow) => workflow.featureId);
@@ -98,7 +113,12 @@ async function resolveFeatureConfig(
     if (!availableFeatures.includes(requestedFeatureId)) {
       const available = availableFeatures.length > 0 ? ` Available features: ${availableFeatures.join(", ")}` : "";
       return {
-        error: `[QRSPI] Workflow not found for feature: ${requestedFeatureId}.${available}`,
+        error: {
+          code: "WORKFLOW_NOT_FOUND",
+          message: `[QRSPI] Workflow not found for feature: ${requestedFeatureId}.${available}`,
+          feature: requestedFeatureId,
+          features: availableFeatures,
+        },
       };
     }
 
@@ -109,13 +129,21 @@ async function resolveFeatureConfig(
 
   if (availableFeatures.length === 0) {
     return {
-      error: "[QRSPI] No workflow found. Run qrspi init <feature_id> first",
+      error: {
+        code: "NO_WORKFLOW",
+        message: "[QRSPI] No workflow found. Run qrspi init <feature_id> first",
+        features: [],
+      },
     };
   }
 
   if (availableFeatures.length > 1) {
     return {
-      error: `[QRSPI] Multiple workflows found: ${availableFeatures.join(", ")}. Re-run with --feature <id>.`,
+      error: {
+        code: "MULTIPLE_WORKFLOWS",
+        message: `[QRSPI] Multiple workflows found: ${availableFeatures.join(", ")}. Re-run with --feature <id>.`,
+        features: availableFeatures,
+      },
     };
   }
 
@@ -126,14 +154,40 @@ async function resolveFeatureConfig(
 
 async function requireFeatureConfig(
   opts: FeatureScopedCommandOptions,
+  command = "unknown",
 ): Promise<SessionConfig | null> {
   const result = await resolveFeatureConfig(opts);
   if (!result.config) {
-    printErr(result.error ?? "[QRSPI] Failed to resolve workflow");
+    const error = result.error ?? {
+      code: "FEATURE_RESOLUTION_FAILED",
+      message: "[QRSPI] Failed to resolve workflow",
+    };
+    printCommandError(command, opts, error);
     return null;
   }
 
   return result.config;
+}
+
+function isJsonOutput(opts: CliGlobalOptions): boolean {
+  return opts.json === true || opts.output === "json";
+}
+
+function printCommandError(
+  command: string,
+  opts: CliGlobalOptions,
+  error: { code: string; message: string; feature?: string; features?: string[] },
+): void {
+  if (isJsonOutput(opts)) {
+    printJson(buildErrorJson({ command, ...error }));
+    return;
+  }
+
+  printErr(error.message);
+}
+
+async function readTextFile(projectRoot: string, filePath: string): Promise<string> {
+  return readFile(resolve(projectRoot, filePath), "utf-8");
 }
 
 function withFeatureOption(cmd: Command): Command {
@@ -226,13 +280,18 @@ export async function handleInitCommand(opts: InitCommandOptions): Promise<numbe
 export async function handleStatusCommand(
   opts: FeatureScopedCommandOptions,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "status");
   if (!config) {
     return 1;
   }
 
   const state = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
   const engine = (await readEngineState(config)) ?? createInitialEngineState(config);
+  if (isJsonOutput(opts)) {
+    printJson(await buildStatusJson("status", config, state, engine));
+    return 0;
+  }
+
   print(formatStatusOutput(state, engine));
   return 0;
 }
@@ -240,12 +299,18 @@ export async function handleStatusCommand(
 export async function handleStageCommand(
   opts: FeatureScopedCommandOptions,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "stage");
   if (!config) {
     return 1;
   }
 
   const state = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
+  const engine = (await readEngineState(config)) ?? createInitialEngineState(config);
+  if (isJsonOutput(opts)) {
+    printJson(await buildStageJson(config, state, engine));
+    return 0;
+  }
+
   print(formatStageOutput(state));
   return 0;
 }
@@ -253,12 +318,17 @@ export async function handleStageCommand(
 export async function handleListCommand(opts: CliGlobalOptions): Promise<number> {
   const projectConfig = resolveProjectConfig(opts);
   const features = await listFeatures(projectConfig.projectRoot, projectConfig.outputDir);
+  if (isJsonOutput(opts)) {
+    printJson(buildListJson(features));
+    return 0;
+  }
+
   print(formatFeatureList(features));
   return 0;
 }
 
 export async function handlePromptCommand(opts: PromptCommandOptions): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "prompt");
   if (!config) {
     return 1;
   }
@@ -329,7 +399,7 @@ export async function handlePromptExportCommand(
 }
 
 export async function handleRunCommand(opts: RunCommandOptions): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "run");
   if (!config) {
     return 1;
   }
@@ -338,6 +408,17 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
   const runner = buildRunner(runnerName, { model: opts.model });
 
   const { workflowState, engineState, results } = await runWorkflow(config, runner, opts);
+  if (isJsonOutput(opts)) {
+    const payload = await buildRunJson(
+      config,
+      workflowState,
+      engineState,
+      results,
+      opts.includeRunnerOutput,
+    );
+    printJson(payload);
+    return payload.ok ? 0 : 1;
+  }
 
   print(`[QRSPI] Resumed workflow: ${getStageName(workflowState.currentStage)} (Feature: ${config.featureId})`);
 
@@ -393,10 +474,10 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
 }
 
 export async function handleApproveCommand(
-  opts: FeatureScopedCommandOptions,
+  opts: ApproveCommandOptions,
   stage?: string,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "approve");
   if (!config) {
     return 1;
   }
@@ -406,48 +487,85 @@ export async function handleApproveCommand(
     (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
   const approvedStage = targetStage ?? currentState.currentStage;
 
-  await approveCurrentStage(
-    config,
-    targetStage,
-  );
+  try {
+    const note = opts.noteFile ? await readTextFile(config.projectRoot, opts.noteFile) : undefined;
+    const result = await approveCurrentStage(
+      config,
+      targetStage,
+      undefined,
+      note,
+      opts.noteFile,
+    );
 
-  const { getNextStage: getNext } = await import("../workflow/stage-schema.js");
-  const nextStage = getNext(approvedStage as StageCode);
+    if (isJsonOutput(opts)) {
+      printJson(buildApproveJson(config, approvedStage as StageCode, result.workflowState, result.engineState));
+      return 0;
+    }
 
-  if (nextStage) {
-    print(formatApproveResult(approvedStage as StageCode, nextStage));
-  } else {
-    print(`✅ ${approvedStage} approved, workflow completed`);
+    const { getNextStage: getNext } = await import("../workflow/stage-schema.js");
+    const nextStage = getNext(approvedStage as StageCode);
+
+    if (nextStage) {
+      print(formatApproveResult(approvedStage as StageCode, nextStage));
+    } else {
+      print(`✅ ${approvedStage} approved, workflow completed`);
+    }
+    return 0;
+  } catch (error) {
+    printCommandError("approve", opts, {
+      code: "APPROVE_FAILED",
+      message: `[QRSPI] Error: ${error instanceof Error ? error.message : String(error)}`,
+      feature: config.featureId,
+    });
+    return 1;
   }
-  return 0;
 }
 
 export async function handleRejectCommand(
   opts: RejectCommandOptions,
   stage?: string,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "reject");
   if (!config) {
     return 1;
   }
 
   const targetStage = stage as StageCode | undefined;
-  const { workflowState } = await rejectCurrentStage(
-    config,
-    targetStage,
-    opts.comment,
-  );
 
-  print(`[QRSPI] Rejected stage: ${workflowState.currentStage}`);
-  print("[QRSPI] Stage is ready to regenerate. Run qrspi run to execute it again.");
-  return 0;
+  try {
+    const feedback = opts.feedbackFile ? await readTextFile(config.projectRoot, opts.feedbackFile) : undefined;
+    const comment = [opts.comment, feedback].filter(Boolean).join("\n\n") || undefined;
+    const { workflowState, engineState } = await rejectCurrentStage(
+      config,
+      targetStage,
+      comment,
+      opts.feedbackFile,
+    );
+    const rejectedStage = targetStage ?? workflowState.currentStage;
+
+    if (isJsonOutput(opts)) {
+      printJson(buildRejectJson(config, rejectedStage, workflowState, engineState));
+      return 0;
+    }
+
+    print(`[QRSPI] Rejected stage: ${workflowState.currentStage}`);
+    print("[QRSPI] Stage is ready to regenerate. Run qrspi run to execute it again.");
+    return 0;
+  } catch (error) {
+    printCommandError("reject", opts, {
+      code: "REJECT_FAILED",
+      message: `[QRSPI] Error: ${error instanceof Error ? error.message : String(error)}`,
+      feature: config.featureId,
+    });
+    return 1;
+  }
 }
 
 export async function handleRewindCommand(
   opts: RewindCommandOptions,
   stage: string,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "rewind");
   if (!config) {
     return 1;
   }
@@ -471,7 +589,7 @@ export async function handleRewindCommand(
 export async function handleAdvanceCommand(
   opts: AdvanceCommandOptions,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "advance");
   if (!config) {
     return 1;
   }
@@ -484,7 +602,7 @@ export async function handleAdvanceCommand(
 export async function handleSliceListCommand(
   opts: FeatureScopedCommandOptions,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "slice");
   if (!config) {
     return 1;
   }
@@ -508,7 +626,7 @@ export async function handleSliceAddCommand(
   order: number,
   checkpoint: string,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "slice");
   if (!config) {
     return 1;
   }
@@ -543,13 +661,18 @@ export async function handleBudgetCommand(_opts: CliGlobalOptions): Promise<numb
 export async function handleContextCommand(
   opts: FeatureScopedCommandOptions,
 ): Promise<number> {
-  const config = await requireFeatureConfig(opts);
+  const config = await requireFeatureConfig(opts, "context");
   if (!config) {
     return 1;
   }
 
   const state = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
+  const engine = (await readEngineState(config)) ?? createInitialEngineState(config);
   const context = await buildContextPack(state.currentStage, config);
+  if (isJsonOutput(opts)) {
+    printJson(buildContextJson(config, state, engine, context));
+    return 0;
+  }
 
   print(`Current Stage: ${state.currentStage}`);
   print(`Dependency count: ${context.dependencies.length}`);
@@ -577,7 +700,9 @@ export async function main(argv?: string[]): Promise<number> {
       .option("--root <path>", "Project root directory", ".")
       .option("--runner <name>", "Runner type (claude/codex/mock)")
       .option("--model <model>", "Model name")
-      .option("--lang <code>", "Language (en/zh)", resolveLangFromEnv());
+      .option("--lang <code>", "Language (en/zh)", resolveLangFromEnv())
+      .option("--output <format>", "Output format (text/json)", "text")
+      .option("--json", "Output JSON");
 
   const featureScopedOpts = (cmd: Command) => withFeatureOption(globalOpts(cmd));
 
@@ -647,6 +772,7 @@ export async function main(argv?: string[]): Promise<number> {
       .option("--input <text>", "User requirement input")
       .option("--max-stages <n>", "Maximum stages to execute", parseInt)
       .option("--no-stop-at-gate", "Do not stop at gate stages")
+      .option("--include-runner-output", "Include runner stdout/stderr in JSON output", false)
   ).action(async (opts: RunCommandOptions) => {
     const code = await handleRunCommand(opts);
     process.exitCode = code;
@@ -656,7 +782,8 @@ export async function main(argv?: string[]): Promise<number> {
     program
       .command("approve [stage]")
       .description("Approve a gate stage")
-  ).action(async (stage: string | undefined, opts: FeatureScopedCommandOptions) => {
+      .option("--note-file <path>", "Markdown note file to store with the approval")
+  ).action(async (stage: string | undefined, opts: ApproveCommandOptions) => {
     const code = await handleApproveCommand(opts, stage);
     process.exitCode = code;
   });
@@ -666,6 +793,7 @@ export async function main(argv?: string[]): Promise<number> {
       .command("reject [stage]")
       .description("Reject a gate stage and make it ready to regenerate")
       .option("--comment <text>", "Rejection comment")
+      .option("--feedback-file <path>", "Markdown feedback file to store with the rejection")
   ).action(async (stage: string | undefined, opts: RejectCommandOptions) => {
     const code = await handleRejectCommand(opts, stage);
     process.exitCode = code;

@@ -13,6 +13,7 @@ export function resolveFileStoreLayout(config: SessionConfig): FileStoreLayout {
     sessionsDir: join(sessionDir, "sessions"),
     structuredDir: join(sessionDir, "structured"),
     promptsDir: join(sessionDir, "prompts"),
+    gateReviewsDir: join(sessionDir, "gate_reviews"),
   };
 }
 
@@ -34,4 +35,17 @@ export function buildRunDirName(stage: StageCode, attempt: number): string {
     .slice(0, 15)
     .replace(/(\d{8})(\d{6}).*/, "$1_$2");
   return `${stage}_${ts}_attempt${attempt}`;
+}
+
+export function buildGateReviewFilename(
+  stage: StageCode,
+  decision: "approved" | "rejected",
+  date = new Date(),
+): string {
+  const ts = date
+    .toISOString()
+    .replace(/[-:T]/g, "")
+    .slice(0, 15)
+    .replace(/(\d{8})(\d{6}).*/, "$1_$2");
+  return `${stage}_${ts}_${decision}.md`;
 }
