@@ -18,6 +18,7 @@
   ],
   "skills": "./skills/",
   "hooks": "./hooks/qrspi-hooks.json",
+  "scripts": "./scripts/",
   "interface": {
     "displayName": "QRSPI",
     "shortDescription": "Structured programming workflow for AI coding agents",

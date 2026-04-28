@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 type PluginManifest = {
   skills?: string;
   hooks?: string;
+  scripts?: string;
   mcpServers?: string;
   apps?: string;
   interface?: {
@@ -39,6 +40,7 @@ describe("Codex plugin manifests", () => {
 
       expectManifestPath(manifestPath, manifest.skills);
       expectManifestPath(manifestPath, manifest.hooks);
+      expectManifestPath(manifestPath, manifest.scripts);
       expectManifestPath(manifestPath, manifest.mcpServers);
       expectManifestPath(manifestPath, manifest.apps);
       expectManifestPath(manifestPath, manifest.interface?.composerIcon);
@@ -47,6 +49,23 @@ describe("Codex plugin manifests", () => {
       for (const screenshot of manifest.interface?.screenshots ?? []) {
         expectManifestPath(manifestPath, screenshot);
       }
+    }
+  });
+
+  it("declares shell scripts with a shebang when scripts are present", () => {
+    const manifestPath = resolve(repoRoot, "plugins/qrspi/.codex-plugin/plugin.json");
+    const manifest = readManifest(manifestPath);
+    if (!manifest.scripts) {
+      return;
+    }
+
+    const scriptsDir = resolve(dirname(dirname(manifestPath)), manifest.scripts);
+    expect(existsSync(scriptsDir)).toBe(true);
+
+    for (const filename of ["qrspi-status-context.sh", "qrspi-gate-review-context.sh", "qrspi-approve.sh"]) {
+      const filePath = resolve(scriptsDir, filename);
+      expect(existsSync(filePath), `${filename} should exist`).toBe(true);
+      expect(readFileSync(filePath, "utf-8").startsWith("#!/bin/bash")).toBe(true);
     }
   });
 });

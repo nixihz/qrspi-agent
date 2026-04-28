@@ -1,7 +1,7 @@
 {
   "name": "qrspi",
   "version": "0.1.0-preview",
-  "description": "Structured programming workflow cockpit for AI coding agents.",
+  "description": "Structured programming workflow for AI coding agents.",
   "author": {
     "name": "Brian Xie",
     "url": "https://github.com/nixihz"
@@ -19,11 +19,10 @@
   "skills": "./skills/",
   "hooks": "./hooks/qrspi-hooks.json",
   "mcpServers": "./.mcp.json",
-  "apps": "./apps/qrspi-dashboard/.app.json",
   "interface": {
     "displayName": "QRSPI",
     "shortDescription": "Structured programming workflow for AI coding agents",
-    "longDescription": "QRSPI brings the CLI workflow engine, Codex skill, MCP tools, hooks, and a dashboard preview into one structured delivery cockpit for feature work from requirement to PR.",
+    "longDescription": "QRSPI brings the CLI workflow engine, Codex skill, MCP tools, and hooks into one structured delivery flow for feature work from requirement to PR. The dashboard screenshot is a preview asset only; the CLI remains the source of truth.",
     "developerName": "Brian Xie",
     "category": "Productivity",
     "capabilities": [

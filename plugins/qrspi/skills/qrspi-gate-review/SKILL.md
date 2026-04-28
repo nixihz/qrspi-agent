@@ -27,11 +27,16 @@ qrspi status --root . --feature <feature_id> --json
 
 2. Confirm the current stage is a gate waiting for approval:
 
-- `stage.is_gate` must be `true`
-- `stage.status` should be `waiting_approval`
-- If not, explain the current `next_action` and stop the gate review
+- `data.workflow.waiting_for_gate` must be `true`
+- `data.workflow.current_gate` should be `D`, `S`, or `PR`
+- `data.current_gate_context` should exist
+- If not, explain `data.next_action` and stop the gate review
 
-3. Read the files from `artifacts.latest` and `artifacts.structured` when present.
+3. Read the files from:
+
+- `data.current_gate_context.markdown_artifact.path`
+- `data.current_gate_context.structured_artifact.path` when present
+- `data.current_gate_context.review_items[]` for machine-readable confirmation points
 
 4. Extract the smallest useful set of human confirmations. Ask exactly one question at a time.
 

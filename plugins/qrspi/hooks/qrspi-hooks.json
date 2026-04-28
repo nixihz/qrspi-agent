@@ -19,8 +19,9 @@
       "instructions": [
         "Use the qrspi-cli-workflow skill for QRSPI workflow operations.",
         "Use the qrspi-gate-review skill when the user asks to review or decide a gate artifact.",
-        "Use qrspi CLI JSON output for state and artifact facts.",
+        "Use `qrspi status --json` to understand the current workflow state before acting.",
         "Do not manually modify .qrspi state files.",
+        "Gate reviews must be recorded through `qrspi approve --json` or `qrspi reject --json`.",
         "Do not bypass D, S, or PR human gates."
       ]
     }
