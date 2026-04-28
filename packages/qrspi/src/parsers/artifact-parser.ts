@@ -72,54 +72,45 @@ function parseR(content: string): ParsedArtifact {
 }
 
 function parseD(content: string): ParsedArtifact {
-  const decisions = extractMatches(content, /^###\s+(Decision\s+\d+|决策\s+\d+):\s+(.+)$/gm).map((m) => m[1]);
-  const pending = extractMatches(content, /(Needs? confirmation|需要确认)\*?\*?:\s*(.+)/g).map((m) => m[1]);
-  const summary = `Design doc contains ${decisions.length} decisions, ${pending.length} pending confirmations.`;
+  const decisions = extractMatches(content, /^###\s+(Decision\s+\d+|决策\s+\d+):\s+(.+)$/gm)
+    .map((match) => match[1]);
+  const pending = extractMatches(content, /(Needs? confirmation|需要确认)\*?\*?:\s*(.+)/g)
+    .map((match) => match[1]);
+  const rejectedAlternatives = extractSectionItems(content, ["Rejected Alternatives", "拒绝的备选方案"]);
+  const risks = extractSectionItems(content, ["Risks", "Risks and Mitigations", "风险", "风险与缓解"]);
+  const summary = `Design doc contains ${decisions.length} decisions, ${pending.length} pending confirmations, ${rejectedAlternatives.length} rejected alternatives.`;
   return {
     stage: "D",
     summary,
     structured_data: {
       decisions,
+      rejected_alternatives: rejectedAlternatives,
       pending_confirmations: pending,
+      risks,
     },
   };
 }
 
 function parseS(content: string): ParsedArtifact {
-  const sliceRegex = /^###\s+(Slice|切片)\s+(\d+):\s+(.+)$/gm;
-  const slices: Record<string, unknown>[] = [];
-  let idx = 1;
-  let match: RegExpExecArray | null;
-  const matches: Array<{ order: number; title: string; start: number; end: number }> = [];
-
-  while ((match = sliceRegex.exec(content)) !== null) {
-    matches.push({
-      order: parseInt(match[2], 10),
-      title: match[3].trim(),
-      start: match.index + match[0].length,
-      end: content.length,
-    });
-  }
-
-  for (let i = 0; i < matches.length; i++) {
-    const m = matches[i];
-    const blockEnd = i + 1 < matches.length ? matches[i + 1].start - matches[i + 1].order.toString().length - 10 : content.length;
-    const block = content.slice(m.start, blockEnd);
-    const checkpoint = extractNamedLine(block, "Test") || extractNamedLine(block, "Checkpoint") || extractNamedLine(block, "测试") || extractNamedLine(block, "出口");
-    slices.push({
-      name: m.title,
-      description: extractNamedLine(block, "Goal") || extractNamedLine(block, "目标") || m.title,
-      order: m.order || idx,
-      checkpoint,
-    });
-    idx++;
-  }
-
-  const summary = `Structure outline defines ${slices.length} vertical slices.`;
+  const interfaces = extractCodeSymbols(content, /^\s*export\s+interface\s+([A-Za-z0-9_]+)/gm);
+  const types = extractCodeSymbols(content, /^\s*export\s+type\s+([A-Za-z0-9_]+)/gm);
+  const functions = extractCodeSymbols(content, /^\s*export\s+function\s+([A-Za-z0-9_]+)/gm);
+  const constraints = extractSectionItems(content, [
+    "Architecture Constraints",
+    "Boundaries",
+    "约束",
+    "边界",
+  ]);
+  const summary = `Structure outline defines ${interfaces.length} interfaces, ${types.length} types, and ${functions.length} functions.`;
   return {
     stage: "S",
     summary,
-    structured_data: { slices },
+    structured_data: {
+      interfaces,
+      types,
+      functions,
+      constraints,
+    },
   };
 }
 
@@ -238,6 +229,15 @@ function extractNamedLine(block: string, label: string): string {
   const match = block.match(new RegExp(`\\*\\*${label}\\*\\*:\\s*(.+)`));
   if (match) return match[1].trim();
   return "";
+}
+
+function extractCodeSymbols(content: string, pattern: RegExp): string[] {
+  const matches: string[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(content)) !== null) {
+    matches.push(match[1]);
+  }
+  return matches;
 }
 
 const IMPLEMENTATION_STATUSES: ImplementationStatus[] = [

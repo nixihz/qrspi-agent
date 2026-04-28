@@ -145,21 +145,33 @@ describe("gate review e2e", () => {
       "--json",
     ]);
     const statusPayload = JSON.parse(statusResult.stdout) as {
-      stage: { code: string; is_gate: boolean; status: string };
-      next_action: { kind: string };
-      artifacts: { latest: string; structured: string };
+      data: {
+        workflow: { current_stage: string; waiting_for_gate: boolean };
+        stages: Array<{ code: string; is_gate: boolean; status: string }>;
+        next_action: { kind: string };
+        current_gate_context?: {
+          markdown_artifact: { path: string };
+          structured_artifact?: { path: string };
+          review_items: Array<{ id: string; source: string }>;
+        };
+      };
     };
 
     expect(statusResult.code).toBe(0);
     expect(statusResult.stderr).toBe("");
-    expect(statusPayload.stage).toMatchObject({
+    expect(statusPayload.data.workflow).toMatchObject({
+      current_stage: "D",
+      waiting_for_gate: true,
+    });
+    expect(statusPayload.data.stages.find((stage) => stage.code === "D")).toMatchObject({
       code: "D",
       is_gate: true,
       status: "waiting_approval",
     });
-    expect(statusPayload.next_action.kind).toBe("human_gate_review");
-    expect(readFileSync(join(projectRoot, statusPayload.artifacts.latest), "utf-8")).toContain("Recommended Approach");
-    expect(readFileSync(join(projectRoot, statusPayload.artifacts.structured), "utf-8")).toContain("Use CLI JSON output");
+    expect(statusPayload.data.next_action.kind).toBe("human_gate_review");
+    expect(readFileSync(join(projectRoot, statusPayload.data.current_gate_context!.markdown_artifact.path), "utf-8")).toContain("Recommended Approach");
+    expect(readFileSync(join(projectRoot, statusPayload.data.current_gate_context!.structured_artifact!.path), "utf-8")).toContain("Use CLI JSON output");
+    expect(statusPayload.data.current_gate_context?.review_items.length).toBeGreaterThanOrEqual(4);
 
     const reviewNote = join(projectRoot, "design-gate-review.md");
     writeFileSync(
@@ -194,24 +206,25 @@ describe("gate review e2e", () => {
     ]);
     const approvePayload = JSON.parse(approveResult.stdout) as {
       ok: boolean;
-      approved_stage: string;
-      stage: { code: string; status: string };
-      gate_review?: { decision: string; reviewPath?: string; note?: string };
+      data: {
+        workflow: { current_stage: string };
+        review_record: { decision: string; review_path?: string; note?: string; input_source: string };
+      };
     };
     const approvedWorkflowState = await readWorkflowState(config);
     const approvedEngineState = await readEngineState(config);
 
     expect(approveResult.code).toBe(0);
     expect(approvePayload.ok).toBe(true);
-    expect(approvePayload.approved_stage).toBe("D");
-    expect(approvePayload.stage.code).toBe("S");
-    expect(approvePayload.gate_review).toMatchObject({
+    expect(approvePayload.data.workflow.current_stage).toBe("S");
+    expect(approvePayload.data.review_record).toMatchObject({
       decision: "approved",
-      reviewPath: expect.stringContaining(`.qrspi/${featureId}/gate_reviews/D_`),
+      input_source: "file",
+      review_path: expect.stringContaining(`.qrspi/${featureId}/gate_reviews/D_`),
     });
-    expect(approvePayload.gate_review?.note).toContain("Decision: approved with notes");
+    expect(approvePayload.data.review_record.note).toContain("Decision: approved with notes");
     expect(approvedWorkflowState?.currentStage).toBe("S");
-    expect(approvedEngineState?.gate_reviews?.[0]?.reviewPath).toBeDefined();
-    expect(readFileSync(approvedEngineState?.gate_reviews?.[0]?.reviewPath ?? "", "utf-8")).toContain("Keep JSON schemas documented");
+    expect(approvedEngineState?.gate_reviews?.[0]?.review_path).toBeDefined();
+    expect(readFileSync(approvedEngineState?.gate_reviews?.[0]?.review_path ?? "", "utf-8")).toContain("Keep JSON schemas documented");
   });
 });

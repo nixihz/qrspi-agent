@@ -39,17 +39,27 @@ Needs confirmation: Mobile support?`;
     expect(result.structured_data.pending_confirmations).toEqual(["Mobile support?"]);
   });
 
-  it("parses S stage with slices", () => {
-    const content = `### Slice 1: Core Auth
-**Goal**: Implement login
-**Test**: Unit tests pass
-### Slice 2: Permissions
-**Checkpoint**: Integration tests`;
+  it("parses S stage with interfaces, types, and functions", () => {
+    const content = `## Type Definitions
+\`\`\`typescript
+export interface StatusCommandData {}
+export type GateStageCode = "D" | "S" | "PR";
+export function buildStatusCommandData(): void {}
+\`\`\`
+
+## Architecture Constraints
+- Preserve CLI exit codes
+- Keep .qrspi as the only source of truth`;
     const result = parseStageOutput("S", content);
     expect(result.stage).toBe("S");
-    expect(result.summary).toContain("2 vertical slices");
-    expect(result.structured_data.slices).toHaveLength(2);
-    expect((result.structured_data.slices as Array<Record<string, unknown>>)[0].name).toBe("Core Auth");
+    expect(result.summary).toContain("1 interfaces, 1 types, and 1 functions");
+    expect(result.structured_data.interfaces).toEqual(["StatusCommandData"]);
+    expect(result.structured_data.types).toEqual(["GateStageCode"]);
+    expect(result.structured_data.functions).toEqual(["buildStatusCommandData"]);
+    expect(result.structured_data.constraints).toEqual([
+      "Preserve CLI exit codes",
+      "Keep .qrspi as the only source of truth",
+    ]);
   });
 
   it("parses P stage with rollback items", () => {

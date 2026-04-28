@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { createRequire } from "module";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, writeFile } from "fs/promises";
 import { dirname, resolve, join } from "path";
 import { realpathSync } from "fs";
 import { fileURLToPath } from "url";
@@ -12,6 +12,7 @@ import type {
   ApproveCommandOptions,
   CliGlobalOptions,
   FeatureScopedCommandOptions,
+  GateStageCode,
   InitCommandOptions,
   Lang,
   PromptCommandOptions,
@@ -43,7 +44,7 @@ import {
   writeWorkTree,
   listFeatures,
 } from "../storage/file-repository.js";
-import { buildRunner, resolveRunnerName, resolveRunnerModel } from "../runner/index.js";
+import { buildRunner, resolveRunnerName } from "../runner/index.js";
 import {
   formatStatusOutput,
   formatStageOutput,
@@ -54,15 +55,19 @@ import {
 } from "./output.js";
 import {
   buildApproveJson,
+  buildAdvanceJson,
   buildContextJson,
   buildErrorJson,
   buildInitJson,
   buildListJson,
+  buildRewindJson,
   buildRejectJson,
   buildRunJson,
   buildStageJson,
   buildStatusJson,
-  printJson,
+  isJsonOutputRequested,
+  readReviewTextInput,
+  writeCliResponse,
 } from "./json-output.js";
 import {
   getStageOrder,
@@ -170,25 +175,26 @@ async function requireFeatureConfig(
   return result.config;
 }
 
-function isJsonOutput(opts: CliGlobalOptions): boolean {
-  return opts.json === true || opts.output === "json";
-}
-
 function printCommandError(
   command: string,
   opts: CliGlobalOptions,
   error: { code: string; message: string; feature?: string; features?: string[] },
 ): void {
-  if (isJsonOutput(opts)) {
-    printJson(buildErrorJson({ command, ...error }));
+  if (isJsonOutputRequested(opts)) {
+    writeCliResponse(
+      buildErrorJson({
+        command,
+        code: error.code,
+        message: error.message,
+        feature: error.feature,
+        details: error.features ? { features: error.features } : undefined,
+      }),
+      "json",
+    );
     return;
   }
 
   printErr(error.message);
-}
-
-async function readTextFile(projectRoot: string, filePath: string): Promise<string> {
-  return readFile(resolve(projectRoot, filePath), "utf-8");
 }
 
 function withFeatureOption(cmd: Command): Command {
@@ -274,8 +280,8 @@ export async function handleInitCommand(opts: InitCommandOptions): Promise<numbe
 
   const { workflowState } = await initWorkflow(config);
   const engineState = (await readEngineState(config)) ?? createInitialEngineState(config);
-  if (isJsonOutput(opts)) {
-    printJson(buildInitJson(config, workflowState, engineState));
+  if (isJsonOutputRequested(opts)) {
+    writeCliResponse(buildInitJson(config, workflowState, engineState), "json");
     return 0;
   }
 
@@ -294,8 +300,8 @@ export async function handleStatusCommand(
 
   const state = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
   const engine = (await readEngineState(config)) ?? createInitialEngineState(config);
-  if (isJsonOutput(opts)) {
-    printJson(await buildStatusJson("status", config, state, engine));
+  if (isJsonOutputRequested(opts)) {
+    writeCliResponse(await buildStatusJson("status", config, state, engine), "json");
     return 0;
   }
 
@@ -313,8 +319,8 @@ export async function handleStageCommand(
 
   const state = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
   const engine = (await readEngineState(config)) ?? createInitialEngineState(config);
-  if (isJsonOutput(opts)) {
-    printJson(await buildStageJson(config, state, engine));
+  if (isJsonOutputRequested(opts)) {
+    writeCliResponse(await buildStageJson(config, state, engine), "json");
     return 0;
   }
 
@@ -325,8 +331,8 @@ export async function handleStageCommand(
 export async function handleListCommand(opts: CliGlobalOptions): Promise<number> {
   const projectConfig = resolveProjectConfig(opts);
   const features = await listFeatures(projectConfig.projectRoot, projectConfig.outputDir);
-  if (isJsonOutput(opts)) {
-    printJson(buildListJson(features));
+  if (isJsonOutputRequested(opts)) {
+    writeCliResponse(buildListJson(features), "json");
     return 0;
   }
 
@@ -415,7 +421,7 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
   const runner = buildRunner(runnerName, { model: opts.model });
 
   const { workflowState, engineState, results } = await runWorkflow(config, runner, opts);
-  if (isJsonOutput(opts)) {
+  if (isJsonOutputRequested(opts)) {
     const payload = await buildRunJson(
       config,
       workflowState,
@@ -423,7 +429,7 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
       results,
       opts.includeRunnerOutput,
     );
-    printJson(payload);
+    writeCliResponse(payload, "json");
     return payload.ok ? 0 : 1;
   }
 
@@ -495,17 +501,38 @@ export async function handleApproveCommand(
   const approvedStage = targetStage ?? currentState.currentStage;
 
   try {
-    const note = opts.noteFile ? await readTextFile(config.projectRoot, opts.noteFile) : undefined;
+    const noteInput = await readReviewTextInput({
+      inline: opts.comment,
+      file: opts.noteFile,
+      projectRoot: config.projectRoot,
+    });
+    const feedbackInput = await readReviewTextInput({
+      file: opts.feedbackFile,
+      projectRoot: config.projectRoot,
+    });
     const result = await approveCurrentStage(
       config,
-      targetStage,
-      undefined,
-      note,
-      opts.noteFile,
+      {
+        stage: targetStage as GateStageCode | undefined,
+        reviewer: opts.reviewer,
+        note: noteInput.text,
+        noteFile: opts.noteFile,
+        feedback: feedbackInput.text,
+        feedbackFile: opts.feedbackFile,
+        comment: opts.comment,
+      },
     );
 
-    if (isJsonOutput(opts)) {
-      printJson(buildApproveJson(config, approvedStage as StageCode, result.workflowState, result.engineState));
+    if (isJsonOutputRequested(opts)) {
+      writeCliResponse(
+        await buildApproveJson(
+          config,
+          approvedStage as GateStageCode,
+          result.workflowState,
+          result.engineState,
+        ),
+        "json",
+      );
       return 0;
     }
 
@@ -540,18 +567,39 @@ export async function handleRejectCommand(
   const targetStage = stage as StageCode | undefined;
 
   try {
-    const feedback = opts.feedbackFile ? await readTextFile(config.projectRoot, opts.feedbackFile) : undefined;
-    const comment = [opts.comment, feedback].filter(Boolean).join("\n\n") || undefined;
+    const noteInput = await readReviewTextInput({
+      file: opts.noteFile,
+      projectRoot: config.projectRoot,
+    });
+    const feedbackInput = await readReviewTextInput({
+      inline: opts.comment,
+      file: opts.feedbackFile,
+      projectRoot: config.projectRoot,
+    });
     const { workflowState, engineState } = await rejectCurrentStage(
       config,
-      targetStage,
-      comment,
-      opts.feedbackFile,
+      {
+        stage: targetStage as GateStageCode | undefined,
+        reviewer: opts.reviewer,
+        note: noteInput.text,
+        noteFile: opts.noteFile,
+        feedback: feedbackInput.text,
+        feedbackFile: opts.feedbackFile,
+        comment: opts.comment,
+      },
     );
     const rejectedStage = targetStage ?? workflowState.currentStage;
 
-    if (isJsonOutput(opts)) {
-      printJson(buildRejectJson(config, rejectedStage, workflowState, engineState));
+    if (isJsonOutputRequested(opts)) {
+      writeCliResponse(
+        await buildRejectJson(
+          config,
+          rejectedStage as GateStageCode,
+          workflowState,
+          engineState,
+        ),
+        "json",
+      );
       return 0;
     }
 
@@ -582,11 +630,20 @@ export async function handleRewindCommand(
     return 1;
   }
 
-  const { workflowState } = await rewindWorkflowStage(
+  const { workflowState, engineState } = await rewindWorkflowStage(
     config,
     stage,
     opts.reason,
   );
+
+  if (isJsonOutputRequested(opts)) {
+    const statusEnvelope = await buildStatusJson("status", config, workflowState, engineState);
+    writeCliResponse(
+      buildRewindJson(config, statusEnvelope.data!.workflow, stage as StageCode),
+      "json",
+    );
+    return 0;
+  }
 
   print(`[QRSPI] Rewound workflow to stage: ${getStageName(workflowState.currentStage)}`);
   print("[QRSPI] Stage is ready to regenerate. Run qrspi run to execute it again.");
@@ -602,6 +659,17 @@ export async function handleAdvanceCommand(
   }
 
   const state = await advanceWorkflowStage(config, opts.force);
+  const engineState = (await readEngineState(config)) ?? createInitialEngineState(config);
+
+  if (isJsonOutputRequested(opts)) {
+    const statusEnvelope = await buildStatusJson("status", config, state, engineState);
+    writeCliResponse(
+      buildAdvanceJson(config, statusEnvelope.data!.workflow),
+      "json",
+    );
+    return 0;
+  }
+
   print(`[QRSPI] Advanced to stage: ${getStageName(state.currentStage)}`);
   return 0;
 }
@@ -674,10 +742,9 @@ export async function handleContextCommand(
   }
 
   const state = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
-  const engine = (await readEngineState(config)) ?? createInitialEngineState(config);
   const context = await buildContextPack(state.currentStage, config);
-  if (isJsonOutput(opts)) {
-    printJson(buildContextJson(config, state, engine, context));
+  if (isJsonOutputRequested(opts)) {
+    writeCliResponse(await buildContextJson(config, state, context), "json");
     return 0;
   }
 
@@ -789,7 +856,10 @@ export async function main(argv?: string[]): Promise<number> {
     program
       .command("approve [stage]")
       .description("Approve a gate stage")
+      .option("--comment <text>", "Approval note text")
+      .option("--reviewer <name>", "Reviewer identity")
       .option("--note-file <path>", "Markdown note file to store with the approval")
+      .option("--feedback-file <path>", "Optional supplemental feedback file to store with the approval")
   ).action(async (stage: string | undefined, opts: ApproveCommandOptions) => {
     const code = await handleApproveCommand(opts, stage);
     process.exitCode = code;
@@ -800,6 +870,8 @@ export async function main(argv?: string[]): Promise<number> {
       .command("reject [stage]")
       .description("Reject a gate stage and make it ready to regenerate")
       .option("--comment <text>", "Rejection comment")
+      .option("--reviewer <name>", "Reviewer identity")
+      .option("--note-file <path>", "Optional markdown note file to store alongside the rejection")
       .option("--feedback-file <path>", "Markdown feedback file to store with the rejection")
   ).action(async (stage: string | undefined, opts: RejectCommandOptions) => {
     const code = await handleRejectCommand(opts, stage);

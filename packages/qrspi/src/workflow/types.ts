@@ -1,10 +1,20 @@
 export type StageCode = "Q" | "R" | "D" | "S" | "P" | "W" | "I" | "PR";
 
+export type GateStageCode = "D" | "S" | "PR";
+
 export type StageKind = "alignment" | "execution";
 
 export type RunnerName = "claude" | "codex" | "mock";
 
-export type CliOutputFormat = "text" | "json";
+export type OutputFormat = "text" | "json";
+
+export type CliOutputFormat = OutputFormat;
+
+export type GateDecision = "approved" | "rejected";
+
+export type ReviewInputSource = "inline" | "file" | "none";
+
+export type ModelTier = "low" | "standard" | "powerful";
 
 export type SessionStatus =
   | "idle"
@@ -23,6 +33,177 @@ export type ImplementationStatus =
   | "NEEDS_CONTEXT";
 
 export type ValidationSeverity = "error" | "warning" | "info";
+
+export interface CliResponseEnvelope<TData = unknown> {
+  schema_version: "1";
+  ok: boolean;
+  command: string;
+  feature_id?: string;
+  timestamp: string;
+  data?: TData;
+  error?: CliErrorEnvelope;
+}
+
+export interface CliErrorEnvelope {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface FeatureRef {
+  feature_id: string;
+  project_root: string;
+  output_dir: string;
+}
+
+export interface NextActionSummary {
+  kind: string;
+  message: string;
+}
+
+export interface WorkflowStatusSummary {
+  feature_id: string;
+  current_stage: StageCode;
+  engine_status: SessionStatus;
+  waiting_for_gate: boolean;
+  current_gate?: GateStageCode;
+  last_error?: string;
+  updated_at?: string;
+}
+
+export interface StageSummary {
+  code: StageCode;
+  name: string;
+  description: string;
+  is_gate: boolean;
+  status: SessionStatus;
+  attempts: number;
+}
+
+export interface ArtifactPointer {
+  stage: StageCode;
+  kind: "markdown" | "structured" | "run_parsed";
+  path: string;
+  exists: boolean;
+  updated_at?: string;
+}
+
+export interface ValidationSummary {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface GateReviewItem {
+  id: string;
+  label: string;
+  status: "confirmed" | "pending" | "unknown";
+  source: "structured" | "markdown" | "derived";
+  text: string;
+}
+
+export interface CurrentGateContext {
+  stage: GateStageCode;
+  markdown_artifact: ArtifactPointer;
+  structured_artifact?: ArtifactPointer;
+  review_items: GateReviewItem[];
+  validation?: ValidationSummary;
+}
+
+export interface ApprovalRecord {
+  stage: GateStageCode;
+  approved_at: string;
+  approved_by?: string;
+  comment?: string;
+}
+
+export interface GateReviewRecord {
+  id: string;
+  feature_id: string;
+  stage: GateStageCode;
+  decision: GateDecision;
+  reviewed_at: string;
+  reviewed_by?: string;
+  note?: string;
+  feedback?: string;
+  input_source: ReviewInputSource;
+  artifact: ArtifactPointer;
+  structured_artifact?: ArtifactPointer;
+  review_path?: string;
+  source_file?: string;
+}
+
+export interface FeatureListItem {
+  feature_id: string;
+  current_stage: StageCode;
+  status: SessionStatus;
+}
+
+export interface StatusCommandData {
+  workflow: WorkflowStatusSummary;
+  stages: StageSummary[];
+  approvals: ApprovalRecord[];
+  latest_gate_review?: GateReviewRecord;
+  current_gate_context?: CurrentGateContext;
+  artifacts: ArtifactPointer[];
+  next_action: NextActionSummary;
+}
+
+export interface StageCommandData {
+  stage: StageSummary;
+  workflow: WorkflowStatusSummary;
+  next_action: NextActionSummary;
+  artifacts: ArtifactPointer[];
+}
+
+export interface ListCommandData {
+  features: FeatureListItem[];
+}
+
+export interface ContextCommandData {
+  current_stage: StageCode;
+  dependencies: ArtifactPointer[];
+  context_budget: {
+    target_max_percent: number;
+    switch_threshold_percent: number;
+  };
+}
+
+export interface StageRunSummary {
+  stage: StageCode;
+  attempt: number;
+  validation: ValidationSummary;
+  artifact: ArtifactPointer;
+  structured_artifact?: ArtifactPointer;
+  runner_output?: {
+    stdout_file: string;
+    stderr_file: string;
+    stdout?: string;
+    stderr?: string;
+  };
+}
+
+export interface RunCommandData {
+  workflow: WorkflowStatusSummary;
+  executed_stages: StageRunSummary[];
+  stopped_at_gate?: GateStageCode;
+  next_action: NextActionSummary;
+}
+
+export interface GateDecisionCommandData {
+  workflow: WorkflowStatusSummary;
+  review_record: GateReviewRecord;
+}
+
+export interface GateDecisionInput {
+  stage?: GateStageCode;
+  reviewer?: string;
+  note?: string;
+  noteFile?: string;
+  feedback?: string;
+  feedbackFile?: string;
+  comment?: string;
+}
 
 export interface StageDefinition {
   code: StageCode;
@@ -61,23 +242,6 @@ export interface StageArtifact {
   artifactPath: string;
 }
 
-export interface ApprovalRecord {
-  stage: StageCode;
-  approvedAt: string;
-  approvedBy?: string;
-  comment?: string;
-}
-
-export interface GateReviewRecord {
-  stage: StageCode;
-  decision: "approved" | "rejected";
-  recordedAt: string;
-  sourceFile?: string;
-  reviewPath?: string;
-  note?: string;
-  feedback?: string;
-}
-
 export interface EngineRunRecord {
   stage: StageCode;
   attempt: number;
@@ -92,7 +256,7 @@ export interface EngineState {
   currentStage: StageCode;
   status: SessionStatus;
   approvals: ApprovalRecord[];
-  gate_reviews?: GateReviewRecord[];
+  gate_reviews: GateReviewRecord[];
   stage_attempts: Partial<Record<StageCode, number>>;
   history: EngineRunRecord[];
   lastError?: string;
@@ -224,11 +388,16 @@ export interface PromptExportCommandOptions extends CliGlobalOptions {
 
 export interface RejectCommandOptions extends FeatureScopedCommandOptions {
   comment?: string;
+  reviewer?: string;
   feedbackFile?: string;
+  noteFile?: string;
 }
 
 export interface ApproveCommandOptions extends FeatureScopedCommandOptions {
+  comment?: string;
+  reviewer?: string;
   noteFile?: string;
+  feedbackFile?: string;
 }
 
 export interface RewindCommandOptions extends FeatureScopedCommandOptions {
@@ -262,6 +431,7 @@ export interface SliceTask {
   estimated_minutes: number;
   context_budget: string;
   dependencies: string[];
+  model_tier?: ModelTier;
 }
 
 export interface WorkTree {

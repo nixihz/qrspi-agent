@@ -217,41 +217,75 @@ describe("cli main feature scoping", () => {
     const payload = JSON.parse(result.stdout) as {
       ok: boolean;
       command: string;
-      feature: string;
-      stage: { code: string; is_gate: boolean; status: string };
-      next_action: { kind: string };
-      updatedAt: string;
-      history: Array<{ runDir: string; stdout_file: string; validation_file: string }>;
-      latest_run: { runDir: string; stdout_file: string; parsed_artifact_file: string } | null;
-      work_tree: { path: string; slice_count: number; slices: Array<{ name: string; checkpoint: string }> };
+      feature_id: string;
+      data: {
+        workflow: { feature_id: string; current_stage: string; waiting_for_gate: boolean; updated_at: string };
+        stages: Array<{ code: string; is_gate: boolean; attempts: number; status: string }>;
+        artifacts: Array<{ kind: string; path: string; exists: boolean }>;
+        next_action: { kind: string };
+        current_gate_context?: { review_items: Array<{ id: string; status: string }> };
+      };
     };
 
     expect(result.code).toBe(0);
     expect(result.stderr).toBe("");
     expect(payload.ok).toBe(true);
     expect(payload.command).toBe("status");
-    expect(payload.feature).toBe("design-gate");
-    expect(payload.stage).toMatchObject({
+    expect(payload.feature_id).toBe("design-gate");
+    expect(payload.data.workflow).toMatchObject({
+      feature_id: "design-gate",
+      current_stage: "D",
+      waiting_for_gate: true,
+      updated_at: "2026-04-28T10:01:00.000Z",
+    });
+    expect(payload.data.next_action.kind).toBe("human_gate_review");
+    expect(payload.data.stages).toHaveLength(8);
+    expect(payload.data.stages.find((stage) => stage.code === "D")).toMatchObject({
       code: "D",
       is_gate: true,
+      attempts: 1,
       status: "waiting_approval",
     });
-    expect(payload.next_action.kind).toBe("human_gate_review");
-    expect(payload.updatedAt).toBe("2026-04-28T10:01:00.000Z");
-    expect(payload.history).toHaveLength(1);
-    expect(payload.history[0]).toMatchObject({
-      runDir: ".qrspi/design-gate/runs/D_20260428_100000_attempt1",
-      stdout_file: ".qrspi/design-gate/runs/D_20260428_100000_attempt1/runner_stdout.txt",
-      validation_file: ".qrspi/design-gate/runs/D_20260428_100000_attempt1/validation.json",
-    });
-    expect(payload.latest_run).toMatchObject({
-      runDir: ".qrspi/design-gate/runs/D_20260428_100000_attempt1",
-      parsed_artifact_file: ".qrspi/design-gate/runs/D_20260428_100000_attempt1/parsed_artifact.json",
-    });
-    expect(payload.work_tree).toMatchObject({
-      path: ".qrspi/design-gate/slices/work_tree.json",
-      slice_count: 1,
-      slices: [{ name: "dashboard-queue", checkpoint: "Queue shows pending gates first." }],
+    expect(payload.data.artifacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "run_parsed",
+          path: ".qrspi/design-gate/runs/D_20260428_100000_attempt1/parsed_artifact.json",
+          exists: true,
+        }),
+      ]),
+    );
+    expect(payload.data.current_gate_context).toBeDefined();
+  });
+
+  it("prints context as a JSON envelope", async () => {
+    await createWorkflow(projectRoot, "context-json", "R");
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "context",
+      "--root",
+      projectRoot,
+      "--feature",
+      "context-json",
+      "--json",
+    ]);
+    const payload = JSON.parse(result.stdout) as {
+      ok: boolean;
+      command: string;
+      data: {
+        current_stage: string;
+        context_budget: { target_max_percent: number; switch_threshold_percent: number };
+      };
+    };
+
+    expect(result.code).toBe(0);
+    expect(payload.command).toBe("context");
+    expect(payload.data.current_stage).toBe("R");
+    expect(payload.data.context_budget).toEqual({
+      target_max_percent: 40,
+      switch_threshold_percent: 60,
     });
   });
 
@@ -268,9 +302,11 @@ describe("cli main feature scoping", () => {
     const payload = JSON.parse(result.stdout) as {
       ok: boolean;
       command: string;
-      feature: string;
-      stage: { code: string; status: string };
-      next_action: { kind: string };
+      feature_id: string;
+      data: {
+        workflow: { feature_id: string; current_stage: string; engine_status: string };
+        next_action: { kind: string };
+      };
     };
 
     expect(result.code).toBe(0);
@@ -278,9 +314,11 @@ describe("cli main feature scoping", () => {
     expect(payload).toMatchObject({
       ok: true,
       command: "init",
-      feature: "json-init",
-      stage: { code: "Q", status: "ready" },
-      next_action: { kind: "run_stage" },
+      feature_id: "json-init",
+      data: {
+        workflow: { feature_id: "json-init", current_stage: "Q", engine_status: "ready" },
+        next_action: { kind: "run_stage" },
+      },
     });
   });
 
@@ -298,14 +336,14 @@ describe("cli main feature scoping", () => {
     ]);
     const payload = JSON.parse(result.stdout) as {
       ok: boolean;
-      error: { code: string; features: string[] };
+      error: { code: string; details?: { features?: string[] } };
     };
 
     expect(result.code).toBe(1);
     expect(result.stderr).toBe("");
     expect(payload.ok).toBe(false);
     expect(payload.error.code).toBe("MULTIPLE_WORKFLOWS");
-    expect(payload.error.features).toEqual(["alpha", "beta"]);
+    expect(payload.error.details?.features).toEqual(["alpha", "beta"]);
   });
 
   it("prints list with --output json", async () => {
@@ -324,15 +362,17 @@ describe("cli main feature scoping", () => {
     const payload = JSON.parse(result.stdout) as {
       ok: boolean;
       command: string;
-      features: Array<{ feature: string; stage: string; status: string }>;
+      data: {
+        features: Array<{ feature_id: string; current_stage: string; status: string }>;
+      };
     };
 
     expect(result.code).toBe(0);
     expect(payload.ok).toBe(true);
     expect(payload.command).toBe("list");
-    expect(payload.features).toEqual([
-      { feature: "alpha", stage: "Q", status: "ready" },
-      { feature: "beta", stage: "R", status: "waiting_approval" },
+    expect(payload.data.features).toEqual([
+      { feature_id: "alpha", current_stage: "Q", status: "ready" },
+      { feature_id: "beta", current_stage: "R", status: "waiting_approval" },
     ]);
   });
 
@@ -491,16 +531,18 @@ describe("cli main feature scoping", () => {
     const payload = JSON.parse(result.stdout) as {
       ok: boolean;
       command: string;
-      results: Array<{ stage: string; artifact: string; runner_output?: unknown }>;
+      data: {
+        executed_stages: Array<{ stage: string; artifact: { path: string }; runner_output?: unknown }>;
+      };
     };
 
     expect(result.code).toBe(0);
     expect(result.stderr).toBe("");
     expect(payload.ok).toBe(true);
     expect(payload.command).toBe("run");
-    expect(payload.results[0]?.stage).toBe("Q");
-    expect(payload.results[0]?.artifact).toContain(".qrspi/json-run/artifacts/Q_");
-    expect(payload.results[0]?.runner_output).toBeUndefined();
+    expect(payload.data.executed_stages[0]?.stage).toBe("Q");
+    expect(payload.data.executed_stages[0]?.artifact.path).toContain(".qrspi/json-run/artifacts/Q_");
+    expect(payload.data.executed_stages[0]?.runner_output).toBeUndefined();
     expect(result.stdout).not.toContain("Technical Questions");
   });
 
@@ -523,11 +565,13 @@ describe("cli main feature scoping", () => {
       "--include-runner-output",
     ]);
     const payload = JSON.parse(result.stdout) as {
-      results: Array<{ runner_output?: { stdout: string } }>;
+      data: {
+        executed_stages: Array<{ runner_output?: { stdout: string } }>;
+      };
     };
 
     expect(result.code).toBe(0);
-    expect(payload.results[0]?.runner_output?.stdout).toContain("Technical Questions");
+    expect(payload.data.executed_stages[0]?.runner_output?.stdout).toContain("Technical Questions");
   });
 
   it("passes --model through run command to runner metadata", async () => {
@@ -636,13 +680,11 @@ describe("cli main feature scoping", () => {
 
     const approvePayload = JSON.parse(approveResult.stdout) as {
       ok: boolean;
-      approved_stage: string;
-      gate_review?: { reviewPath?: string };
+      data: { review_record: { stage: string; review_path?: string; input_source: string } };
     };
     const rejectPayload = JSON.parse(rejectResult.stdout) as {
       ok: boolean;
-      rejected_stage: string;
-      gate_review?: { reviewPath?: string };
+      data: { review_record: { stage: string; review_path?: string; input_source: string } };
     };
     const approvedEngine = await readEngineState(approveConfig);
     const rejectedEngine = await readEngineState(rejectConfig);
@@ -657,36 +699,35 @@ describe("cli main feature scoping", () => {
       "--json",
     ]);
     const statusPayload = JSON.parse(statusResult.stdout) as {
-      gate_reviews?: { latest?: { reviewPath?: string }; history: Array<{ reviewPath?: string }> };
+      data: { latest_gate_review?: { review_path?: string } };
     };
 
     expect(approveResult.code).toBe(0);
-    expect(approvePayload).toMatchObject({ ok: true, approved_stage: "D" });
+    expect(approvePayload).toMatchObject({ ok: true, data: { review_record: { stage: "D", input_source: "file" } } });
     expect(approvedEngine?.approvals[0]?.comment).toContain("Decision: approved with notes");
     expect(approvedEngine?.gate_reviews?.[0]).toMatchObject({
       stage: "D",
       decision: "approved",
-      sourceFile: notePath,
+      source_file: notePath,
     });
     expect(approvedEngine?.gate_reviews?.[0]?.note).toContain("Decision: approved with notes");
-    expect(approvedEngine?.gate_reviews?.[0]?.reviewPath).toContain(".qrspi/approve-note/gate_reviews/D_");
-    expect(approvePayload.gate_review?.reviewPath).toContain(".qrspi/approve-note/gate_reviews/D_");
-    expect(readFileSync(approvedEngine?.gate_reviews?.[0]?.reviewPath ?? "", "utf-8")).toContain("Decision: approved with notes");
-    expect(statusPayload.gate_reviews?.latest?.reviewPath).toBe(approvePayload.gate_review?.reviewPath);
-    expect(statusPayload.gate_reviews?.history).toHaveLength(1);
+    expect(approvedEngine?.gate_reviews?.[0]?.review_path).toContain(".qrspi/approve-note/gate_reviews/D_");
+    expect(approvePayload.data.review_record.review_path).toContain(".qrspi/approve-note/gate_reviews/D_");
+    expect(readFileSync(approvedEngine?.gate_reviews?.[0]?.review_path ?? "", "utf-8")).toContain("Decision: approved with notes");
+    expect(statusPayload.data.latest_gate_review?.review_path).toBe(approvePayload.data.review_record.review_path);
 
     expect(rejectResult.code).toBe(0);
-    expect(rejectPayload).toMatchObject({ ok: true, rejected_stage: "S" });
+    expect(rejectPayload).toMatchObject({ ok: true, data: { review_record: { stage: "S", input_source: "file" } } });
     expect(rejectedEngine?.lastError).toContain("Add the JSON schema slice.");
     expect(rejectedEngine?.gate_reviews?.[0]).toMatchObject({
       stage: "S",
       decision: "rejected",
-      sourceFile: feedbackPath,
+      source_file: feedbackPath,
     });
     expect(rejectedEngine?.gate_reviews?.[0]?.feedback).toContain("Add the JSON schema slice.");
-    expect(rejectedEngine?.gate_reviews?.[0]?.reviewPath).toContain(".qrspi/reject-feedback/gate_reviews/S_");
-    expect(rejectPayload.gate_review?.reviewPath).toContain(".qrspi/reject-feedback/gate_reviews/S_");
-    expect(readFileSync(rejectedEngine?.gate_reviews?.[0]?.reviewPath ?? "", "utf-8")).toContain("Add the JSON schema slice.");
+    expect(rejectedEngine?.gate_reviews?.[0]?.review_path).toContain(".qrspi/reject-feedback/gate_reviews/S_");
+    expect(rejectPayload.data.review_record.review_path).toContain(".qrspi/reject-feedback/gate_reviews/S_");
+    expect(readFileSync(rejectedEngine?.gate_reviews?.[0]?.review_path ?? "", "utf-8")).toContain("Add the JSON schema slice.");
   });
 
   it("accepts feature id for rewind and advance", async () => {

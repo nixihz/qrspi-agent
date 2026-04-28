@@ -1,5 +1,9 @@
+import { randomUUID } from "crypto";
 import { join } from "path";
 import type {
+  GateDecisionInput,
+  GateReviewRecord,
+  GateStageCode,
   ImplementationStatus,
   SessionConfig,
   WorkflowState,
@@ -10,13 +14,11 @@ import type {
   RunnerOptions,
   StageCode,
   RunCommandOptions,
-  ApprovalRecord,
   Lang,
 } from "../workflow/types.js";
 import {
   getNextStage,
   isGateStage,
-  getStageDefinition,
   getStageName,
   getStageIndex,
 } from "../workflow/stage-schema.js";
@@ -35,6 +37,7 @@ import {
   writeRunFile,
   transitionWorkflowState,
   writeGateReviewFile,
+  resolveArtifactPointer,
 } from "../storage/file-repository.js";
 import { resolveFileStoreLayout, buildRunDirName } from "../storage/path-resolver.js";
 import { buildContextPack } from "../context/context-builder.js";
@@ -385,48 +388,65 @@ function getStagePreconditionFailure(stage: StageCode, engineState: EngineState)
 
 export async function approveCurrentStage(
   config: SessionConfig,
-  stage?: StageCode,
-  approver?: string,
-  comment?: string,
-  noteFile?: string,
+  input: GateDecisionInput = {},
 ): Promise<{ workflowState: WorkflowState; engineState: EngineState }> {
   const workflowState =
     (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
   const engineState =
     (await readEngineState(config)) ?? createInitialEngineState(config);
 
-  const targetStage = stage ?? workflowState.currentStage;
+  const targetStage = (input.stage ?? workflowState.currentStage) as StageCode;
 
   if (!isGateStage(targetStage)) {
     throw new Error(`Stage ${targetStage} is not a gate stage, no approval needed`);
   }
+  const gateStage = targetStage as GateStageCode;
 
-  const approval: ApprovalRecord = {
-    stage: targetStage,
-    approvedAt: new Date().toISOString(),
-    approvedBy: approver,
-    comment,
+  if (workflowState.currentStage !== targetStage) {
+    throw new Error(
+      `Cannot approve stage ${targetStage} while current stage is ${workflowState.currentStage}`,
+    );
+  }
+
+  if (engineState.status !== "waiting_approval") {
+    throw new Error(`Stage ${targetStage} is not waiting for approval`);
+  }
+
+  const approvedAt = new Date().toISOString();
+  const note = input.note ?? input.comment;
+  const reviewPath = note
+    ? await writeGateReviewFile(config, targetStage, "approved", note)
+    : undefined;
+  const artifact = await resolveArtifactPointer(config, gateStage, "markdown");
+  const structuredArtifact = await resolveArtifactPointer(config, gateStage, "structured");
+
+  const reviewRecord: GateReviewRecord = {
+    id: randomUUID(),
+    feature_id: config.featureId,
+    stage: gateStage,
+    decision: "approved",
+    reviewed_at: approvedAt,
+    reviewed_by: input.reviewer,
+    note,
+    feedback: input.feedback,
+    input_source: input.noteFile ? "file" : (note ? "inline" : "none"),
+    artifact,
+    structured_artifact: structuredArtifact.exists ? structuredArtifact : undefined,
+    review_path: reviewPath,
+    source_file: input.noteFile,
   };
 
   const next = getNextStage(targetStage);
-  const reviewPath = comment
-    ? await writeGateReviewFile(config, targetStage, "approved", comment)
-    : undefined;
 
   const newEngineState: EngineState = {
     ...engineState,
-    approvals: [...engineState.approvals, approval],
-    gate_reviews: [
-      ...(engineState.gate_reviews ?? []),
-      {
-        stage: targetStage,
-        decision: "approved",
-        recordedAt: approval.approvedAt,
-        sourceFile: noteFile,
-        reviewPath,
-        note: comment,
-      },
-    ],
+    approvals: [...engineState.approvals, {
+      stage: gateStage,
+      approved_at: approvedAt,
+      approved_by: input.reviewer,
+      comment: note,
+    }],
+    gate_reviews: [...engineState.gate_reviews, reviewRecord],
     currentStage: next ?? targetStage,
     status: next ? "ready" : "completed",
     updatedAt: new Date().toISOString(),
@@ -445,20 +465,19 @@ export async function approveCurrentStage(
 
 export async function rejectCurrentStage(
   config: SessionConfig,
-  stage?: StageCode,
-  comment?: string,
-  feedbackFile?: string,
+  input: GateDecisionInput = {},
 ): Promise<{ workflowState: WorkflowState; engineState: EngineState }> {
   const workflowState =
     (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
   const engineState =
     (await readEngineState(config)) ?? createInitialEngineState(config);
 
-  const targetStage = stage ?? workflowState.currentStage;
+  const targetStage = (input.stage ?? workflowState.currentStage) as StageCode;
 
   if (!isGateStage(targetStage)) {
     throw new Error(`Stage ${targetStage} is not a gate stage, no rejection needed`);
   }
+  const gateStage = targetStage as GateStageCode;
 
   if (workflowState.currentStage !== targetStage) {
     throw new Error(
@@ -471,26 +490,35 @@ export async function rejectCurrentStage(
   }
 
   const recordedAt = new Date().toISOString();
-  const reviewPath = comment
-    ? await writeGateReviewFile(config, targetStage, "rejected", comment)
+  const feedback = input.feedback ?? input.comment;
+  const reviewPath = feedback
+    ? await writeGateReviewFile(config, targetStage, "rejected", feedback)
     : undefined;
+  const artifact = await resolveArtifactPointer(config, gateStage, "markdown");
+  const structuredArtifact = await resolveArtifactPointer(config, gateStage, "structured");
+
+  const reviewRecord: GateReviewRecord = {
+    id: randomUUID(),
+    feature_id: config.featureId,
+    stage: gateStage,
+    decision: "rejected",
+    reviewed_at: recordedAt,
+    reviewed_by: input.reviewer,
+    note: input.note,
+    feedback,
+    input_source: input.feedbackFile ? "file" : (feedback ? "inline" : "none"),
+    artifact,
+    structured_artifact: structuredArtifact.exists ? structuredArtifact : undefined,
+    review_path: reviewPath,
+    source_file: input.feedbackFile,
+  };
 
   const newEngineState: EngineState = {
     ...engineState,
     currentStage: targetStage,
     status: "ready",
-    lastError: comment ?? `Stage ${targetStage} rejected; ready to regenerate`,
-    gate_reviews: [
-      ...(engineState.gate_reviews ?? []),
-      {
-        stage: targetStage,
-        decision: "rejected",
-        recordedAt,
-        sourceFile: feedbackFile,
-        reviewPath,
-        feedback: comment,
-      },
-    ],
+    lastError: feedback ?? `Stage ${targetStage} rejected; ready to regenerate`,
+    gate_reviews: [...engineState.gate_reviews, reviewRecord],
     history: engineState.history.filter(
       (entry) => !(entry.stage === targetStage && entry.success),
     ),
@@ -532,6 +560,9 @@ export async function rewindWorkflowStage(
     status: "ready",
     approvals: engineState.approvals.filter(
       (approval) => getStageIndex(approval.stage) < targetIndex,
+    ),
+    gate_reviews: engineState.gate_reviews.filter(
+      (review) => getStageIndex(review.stage) < targetIndex,
     ),
     history: engineState.history.filter(
       (entry) => getStageIndex(entry.stage) < targetIndex,
