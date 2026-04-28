@@ -1,7 +1,0 @@
-{
-  "name": "qrspi-dashboard",
-  "displayName": "QRSPI Dashboard",
-  "description": "Preview cockpit for QRSPI workflows, gates, artifacts, and run logs.",
-  "entry": "./src/index.html",
-  "icon": "../../assets/icon.png"
-}

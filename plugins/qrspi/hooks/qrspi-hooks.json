@@ -3,7 +3,7 @@
   "hooks": [
     {
       "name": "qrspi-intent-reminder",
-      "description": "Guide Codex toward the QRSPI skill and MCP tools for workflow-related requests.",
+      "description": "Guide Codex toward the QRSPI skills and qrspi CLI for workflow-related requests.",
       "triggers": [
         "QRSPI",
         "CRISPY",
@@ -18,7 +18,8 @@
       ],
       "instructions": [
         "Use the qrspi-cli-workflow skill for QRSPI workflow operations.",
-        "Prefer the qrspi MCP tools when they are available.",
+        "Use the qrspi-gate-review skill when the user asks to review or decide a gate artifact.",
+        "Use qrspi CLI JSON output for state and artifact facts.",
         "Do not manually modify .qrspi state files.",
         "Do not bypass D, S, or PR human gates."
       ]

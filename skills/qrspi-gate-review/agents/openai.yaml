@@ -1,0 +1,4 @@
+interface:
+  display_name: "QRSPI Gate Review"
+  short_description: "Review QRSPI gate artifacts interactively"
+  default_prompt: "Use $qrspi-gate-review to inspect the current QRSPI gate, ask one confirmation at a time, and record the approve or reject decision through the qrspi CLI."

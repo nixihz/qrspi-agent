@@ -20,7 +20,7 @@ If the discussion is about QRSPI methodology without real CLI operations, this s
 ## Core principles
 
 - Prefer calling the `qrspi` CLI; do NOT manually simulate the state machine
-- Prefer QRSPI MCP tools when this skill is used from the Codex plugin and the tools are available
+- Prefer `--json` / `--output json` for machine-readable CLI facts when making decisions
 - Read the current `.qrspi/` state first before deciding the next command
 - Follow the CLI-defined stages and gates; do NOT skip `approve`
 - Use `--feature <id>` when the project has multiple workflows
@@ -47,9 +47,9 @@ Or use it without a global install:
 npx qrspi-agent --help
 ```
 
-Inside the Codex plugin preview, the bundled MCP server wraps these same CLI
-operations. Treat MCP results as structured CLI output, not as a separate source
-of truth.
+Inside the Codex plugin, skills handle SOP and next-step judgment while the
+`qrspi` CLI remains the only source of truth for workflow state, artifacts, and
+structured JSON facts.
 
 ## Default workflow
 
@@ -101,7 +101,7 @@ Convention:
 
 - `stage` shows the current stage summary
 - `status` shows the full stage state and runner state
-- If a dashboard is available, use it for human review, but keep CLI/MCP as the source of truth
+- Keep the CLI as the source of truth
 
 ### 3. Get the current stage prompt
 
