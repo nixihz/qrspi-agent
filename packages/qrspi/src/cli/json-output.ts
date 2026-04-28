@@ -178,6 +178,16 @@ export function buildListJson(features: Array<{ featureId: string; currentStage:
   };
 }
 
+export function buildInitJson(config: SessionConfig, state: WorkflowState, engineState: EngineState) {
+  return {
+    ok: true,
+    command: "init",
+    feature: config.featureId,
+    stage: stageEnvelope(state, engineState),
+    next_action: nextAction(state, engineState),
+  };
+}
+
 export function buildContextJson(
   config: SessionConfig,
   state: WorkflowState,

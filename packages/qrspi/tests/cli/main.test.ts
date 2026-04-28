@@ -90,13 +90,21 @@ async function runCli(argv: string[]): Promise<{ code: number; stdout: string; s
 
 describe("cli main feature scoping", () => {
   let projectRoot: string;
+  let originalLang: string | undefined;
 
   beforeEach(() => {
+    originalLang = process.env.LANG;
+    process.env.LANG = "en_US.UTF-8";
     projectRoot = mkdtempSync(join(tmpdir(), "qrspi-cli-main-"));
   });
 
   afterEach(() => {
     rmSync(projectRoot, { recursive: true, force: true });
+    if (originalLang === undefined) {
+      delete process.env.LANG;
+    } else {
+      process.env.LANG = originalLang;
+    }
   });
 
   it("fails fast when multiple workflows exist and feature id is omitted", async () => {
@@ -189,6 +197,35 @@ describe("cli main feature scoping", () => {
       status: "waiting_approval",
     });
     expect(payload.next_action.kind).toBe("human_gate_review");
+  });
+
+  it("prints init as a JSON envelope", async () => {
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "init",
+      "json-init",
+      "--root",
+      projectRoot,
+      "--json",
+    ]);
+    const payload = JSON.parse(result.stdout) as {
+      ok: boolean;
+      command: string;
+      feature: string;
+      stage: { code: string; status: string };
+      next_action: { kind: string };
+    };
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(payload).toMatchObject({
+      ok: true,
+      command: "init",
+      feature: "json-init",
+      stage: { code: "Q", status: "ready" },
+      next_action: { kind: "run_stage" },
+    });
   });
 
   it("prints feature resolution errors as JSON when requested", async () => {

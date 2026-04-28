@@ -16,4 +16,4 @@ npm run build --workspace=@qrspi/mcp
 - `qrspi_run`
 - `qrspi_approve_or_reject`
 
-Each tool returns JSON with the command, exit code, stdout, stderr, and light parsed fields where useful.
+Each tool calls the CLI in JSON mode and returns the command, exit code, stdout, stderr, and parsed `payload` from the CLI JSON contract. It must not parse human-readable CLI output.

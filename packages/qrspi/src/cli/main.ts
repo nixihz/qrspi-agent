@@ -56,6 +56,7 @@ import {
   buildApproveJson,
   buildContextJson,
   buildErrorJson,
+  buildInitJson,
   buildListJson,
   buildRejectJson,
   buildRunJson,
@@ -272,6 +273,12 @@ export async function handleInitCommand(opts: InitCommandOptions): Promise<numbe
   };
 
   const { workflowState } = await initWorkflow(config);
+  const engineState = (await readEngineState(config)) ?? createInitialEngineState(config);
+  if (isJsonOutput(opts)) {
+    printJson(buildInitJson(config, workflowState, engineState));
+    return 0;
+  }
+
   print(`[QRSPI] Initialized workflow: ${opts.featureId}`);
   print(`[QRSPI] Current stage: ${getStageName(workflowState.currentStage)}`);
   return 0;

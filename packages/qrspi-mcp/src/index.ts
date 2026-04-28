@@ -17,12 +17,7 @@ type CliResult = {
   exitCode: number;
   stdout: string;
   stderr: string;
-};
-
-type FeatureSummary = {
-  featureId: string;
-  currentStage: string;
-  status: string;
+  payload?: unknown;
 };
 
 const featureSchema = z.object({
@@ -57,9 +52,23 @@ async function resolveCliCommand(): Promise<{ command: string; prefixArgs: strin
   return { command: "qrspi", prefixArgs: [] };
 }
 
+function ensureJsonOutput(args: string[]): string[] {
+  if (args.includes("--json") || args.includes("--output")) return args;
+  return [...args, "--json"];
+}
+
+function parseCliJson(stdout: string): unknown {
+  if (!stdout.trim()) return undefined;
+  try {
+    return JSON.parse(stdout);
+  } catch {
+    return undefined;
+  }
+}
+
 async function runQrspi(args: string[], root: string): Promise<CliResult> {
   const { command, prefixArgs } = await resolveCliCommand();
-  const fullArgs = [...prefixArgs, ...args];
+  const fullArgs = [...prefixArgs, ...ensureJsonOutput(args)];
 
   try {
     const { stdout, stderr } = await execFileAsync(command, fullArgs, {
@@ -74,6 +83,7 @@ async function runQrspi(args: string[], root: string): Promise<CliResult> {
       exitCode: 0,
       stdout,
       stderr,
+      payload: parseCliJson(stdout),
     };
   } catch (error) {
     const maybeError = error as {
@@ -89,41 +99,9 @@ async function runQrspi(args: string[], root: string): Promise<CliResult> {
       exitCode: typeof maybeError.code === "number" ? maybeError.code : 1,
       stdout: maybeError.stdout ?? "",
       stderr: maybeError.stderr ?? maybeError.message ?? "",
+      payload: parseCliJson(maybeError.stdout ?? ""),
     };
   }
-}
-
-function parseFeatureList(stdout: string): FeatureSummary[] {
-  return stdout
-    .split(/\r?\n/)
-    .map((line) => line.match(/^\s*(?:[✓○!⏸])\s+([^:]+):\s+([A-Z?]+)\s+\(([^)]+)\)/u))
-    .filter((match): match is RegExpMatchArray => Boolean(match))
-    .map((match) => ({
-      featureId: match[1].trim(),
-      currentStage: match[2].trim(),
-      status: match[3].trim(),
-    }));
-}
-
-function parseStatus(stdout: string): Record<string, string> {
-  const summary: Record<string, string> = {};
-  const currentStage = stdout.match(/Current Stage:\s*([A-Z]+)\s*-\s*(.+)$/m);
-  const workflow = stdout.match(/\[QRSPI\]\s+Workflow:\s+(.+)\s+\(Feature:\s+([^)]+)\)/m);
-  const engineStatus = stdout.match(/^Engine Status:\s*(.+)$/m);
-
-  if (workflow) {
-    summary.workflow = workflow[1].trim();
-    summary.featureId = workflow[2].trim();
-  }
-  if (currentStage) {
-    summary.currentStage = currentStage[1].trim();
-    summary.currentStageName = currentStage[2].trim();
-  }
-  if (engineStatus) {
-    summary.engineStatus = engineStatus[1].trim();
-  }
-
-  return summary;
 }
 
 function jsonText(data: unknown) {
@@ -164,10 +142,7 @@ server.registerTool(
   },
   async (input) => {
     const result = await runQrspi(["list", "--root", input.root], input.root);
-    return jsonText({
-      ...result,
-      workflows: parseFeatureList(result.stdout),
-    });
+    return jsonText(result);
   },
 );
 
@@ -180,10 +155,7 @@ server.registerTool(
   async (input) => {
     const args = addFeatureArgs(["status", "--root", input.root], input);
     const result = await runQrspi(args, input.root);
-    return jsonText({
-      ...result,
-      summary: parseStatus(result.stdout),
-    });
+    return jsonText(result);
   },
 );
 
@@ -197,10 +169,7 @@ server.registerTool(
   },
   async (input) => {
     const result = await runQrspi(["init", input.featureId, "--root", input.root], input.root);
-    return jsonText({
-      ...result,
-      featureId: input.featureId,
-    });
+    return jsonText(result);
   },
 );
 
@@ -223,10 +192,10 @@ server.registerTool(
     if (input.maxStages) args = [...args, "--max-stages", String(input.maxStages)];
 
     const result = await runQrspi(args, input.root);
+    const payload = result.payload as { next_action?: { kind?: string } } | undefined;
     return jsonText({
       ...result,
-      summary: parseStatus(result.stdout),
-      stoppedAtGate: /waiting for human confirmation|waiting_approval/i.test(result.stdout),
+      stoppedAtGate: payload?.next_action?.kind === "human_gate_review",
     });
   },
 );
@@ -239,11 +208,23 @@ server.registerTool(
       decision: z.enum(["approve", "reject"]),
       stage: z.enum(["D", "S", "PR"]).optional(),
       comment: z.string().optional(),
+      noteFile: z.string().optional(),
+      feedbackFile: z.string().optional(),
     }).shape,
   },
   async (input) => {
     let args = addFeatureArgs([input.decision, "--root", input.root], input);
-    if (input.stage) args = [input.decision, input.stage, "--root", input.root, ...(input.feature ? ["--feature", input.feature] : [])];
+    if (input.stage) {
+      args = [
+        input.decision,
+        input.stage,
+        "--root",
+        input.root,
+        ...(input.feature ? ["--feature", input.feature] : []),
+      ];
+    }
+    if (input.decision === "approve" && input.noteFile) args = [...args, "--note-file", input.noteFile];
+    if (input.decision === "reject" && input.feedbackFile) args = [...args, "--feedback-file", input.feedbackFile];
     if (input.decision === "reject" && input.comment) args = [...args, "--comment", input.comment];
 
     const result = await runQrspi(args, input.root);

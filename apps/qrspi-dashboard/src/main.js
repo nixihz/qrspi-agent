@@ -748,6 +748,59 @@ function render() {
   renderCapabilities(workflow);
 }
 
+function isCliStatusPayload(value) {
+  return Boolean(
+    value &&
+    value.ok === true &&
+    value.command === "status" &&
+    value.feature &&
+    value.stage?.code,
+  );
+}
+
+async function parseCliStatusWorkflow(fileMap, payload) {
+  const artifactPath = payload.artifacts?.latest ?? "";
+  const structuredPath = payload.artifacts?.structured ?? "";
+  const artifactContent = artifactPath ? await readTextFile(fileMap, artifactPath) : "";
+  const structuredContent = structuredPath ? await readTextFile(fileMap, structuredPath) : "";
+
+  return normalizeWorkflow({
+    featureId: payload.feature,
+    currentStage: payload.stage.code,
+    engineStatus: payload.stage.status,
+    artifacts: artifactPath
+      ? [
+          {
+            stage: payload.stage.code,
+            path: artifactPath,
+            content: artifactContent,
+          },
+        ]
+      : [],
+    latestArtifactPath: artifactPath,
+    latestStructuredPath: structuredPath,
+    latestStructuredJson: structuredContent,
+    approvals: [],
+    history: [],
+    gateReviews: payload.gate_reviews?.history ?? [],
+    lastError: payload.next_action?.kind === "inspect_failure" ? payload.next_action.message ?? "" : "",
+    validation: payload.validation ?? null,
+  });
+}
+
+async function parseCliStatusWorkflows(fileMap) {
+  const workflows = [];
+
+  for (const path of fileMap.keys()) {
+    if (!path.endsWith(".json")) continue;
+    const payload = await readJsonFile(fileMap, path);
+    if (!isCliStatusPayload(payload)) continue;
+    workflows.push(await parseCliStatusWorkflow(fileMap, payload));
+  }
+
+  return workflows.sort((left, right) => left.featureId.localeCompare(right.featureId));
+}
+
 function normalizeWorkflow(workflow) {
   return {
     featureId: workflow.featureId,
@@ -763,6 +816,10 @@ function normalizeWorkflow(workflow) {
     latestRunLogPath: workflow.latestRunLogPath ?? "",
     latestStdout: workflow.latestStdout ?? "",
     latestStderr: workflow.latestStderr ?? "",
+    latestStructuredPath: workflow.latestStructuredPath ?? "",
+    latestStructuredJson: workflow.latestStructuredJson ?? "",
+    gateReviews: workflow.gateReviews ?? [],
+    validation: workflow.validation ?? null,
     workTree: workflow.workTree ?? { slices: [] },
   };
 }
@@ -892,14 +949,18 @@ async function loadProjectFolder(files) {
   }
 
   const featureIds = collectFeatureIds(fileMap);
-  const workflows = [];
+  let workflows = await parseCliStatusWorkflows(fileMap);
 
-  for (const featureId of featureIds) {
-    const workflow = await parseWorkflowFromFiles(fileMap, featureId);
-    if (workflow) workflows.push(workflow);
+  if (workflows.length === 0) {
+    for (const featureId of featureIds) {
+      const workflow = await parseWorkflowFromFiles(fileMap, featureId);
+      if (workflow) workflows.push(workflow);
+    }
   }
 
-  state.sourceMode = "Imported project folder";
+  state.sourceMode = workflows.length > 0 && featureIds.length === 0
+    ? "Imported CLI JSON"
+    : "Imported project folder";
   state.projectRootLabel = [...relativeRoots][0] ?? "Imported workspace";
   state.workflows = workflows;
   state.importedFiles = list;
