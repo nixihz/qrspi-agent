@@ -40,8 +40,12 @@ Typical next steps after `run`:
 # Accept the current gate output
 qrspi approve --root . --feature <feature_id>
 
+# Accept and persist a gate review note
+qrspi approve --root . --feature <feature_id> --note-file /tmp/design-review.md --json
+
 # Regenerate the same gate stage
 qrspi reject --root . --feature <feature_id> --comment "needs changes"
+qrspi reject --root . --feature <feature_id> --feedback-file /tmp/design-feedback.md --json
 qrspi run --root . --feature <feature_id>
 
 # Rewind to an earlier stage, then regenerate
@@ -68,6 +72,7 @@ qrspi run --feature user-authentication --runner mock --max-stages 1
 - Prompt template export for review (`qrspi prompt export`)
 - Multiple workflow selection via `--feature <id>`
 - Gate rejection via `qrspi reject` and workflow rollback via `qrspi rewind <stage>`
+- Machine-readable output via `--json` or `--output json`
 
 ## Execution Semantics
 
@@ -89,8 +94,11 @@ qrspi prompt render Q --root . --feature <feature_id> --input "requirement"
 qrspi prompt export --root . --lang zh --out qrspi-prompts.md
 qrspi prompt export --root . --lang zh --split --out qrspi-prompts/
 qrspi run --root . --feature <feature_id> --runner mock --max-stages 1
+qrspi status --root . --feature <feature_id> --json
 qrspi approve --root . --feature <feature_id>
+qrspi approve --root . --feature <feature_id> --note-file /tmp/design-review.md --json
 qrspi reject --root . --feature <feature_id> --comment "needs changes"
+qrspi reject --root . --feature <feature_id> --feedback-file /tmp/design-feedback.md --json
 qrspi rewind R --root . --feature <feature_id> --reason "redo research"
 qrspi slice add mock-api --root . --feature <feature_id> --desc "Create mock API" --order 1 --checkpoint "curl passes"
 qrspi slice list --root . --feature <feature_id>
@@ -115,3 +123,4 @@ qrspi run --runner mock --input "Add user authentication"
 
 - English repo guide: <https://github.com/nixihz/qrspi-agent>
 - Chinese guide: <https://github.com/nixihz/qrspi-agent/blob/main/docs/README.zh.md>
+- CLI JSON output: <https://github.com/nixihz/qrspi-agent/blob/main/docs/cli-json-output.md>

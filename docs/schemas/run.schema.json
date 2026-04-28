@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nixihz/qrspi-agent/docs/schemas/run.schema.json",
+  "title": "QRSPI run --json",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["ok", "command", "feature", "stage", "next_action", "artifacts", "results"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "command": { "const": "run" },
+        "feature": { "type": "string" },
+        "stage": { "$ref": "common.schema.json#/$defs/stage" },
+        "next_action": { "$ref": "common.schema.json#/$defs/nextAction" },
+        "artifacts": { "$ref": "common.schema.json#/$defs/artifacts" },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["stage", "success", "status", "validation"],
+            "properties": {
+              "stage": { "$ref": "common.schema.json#/$defs/stageCode" },
+              "success": { "type": "boolean" },
+              "status": { "type": "string" },
+              "validation": { "$ref": "common.schema.json#/$defs/validation" },
+              "artifact": { "type": "string" },
+              "run_dir": { "type": "string" },
+              "runner_output": {
+                "type": "object",
+                "properties": {
+                  "stdout_file": { "type": "string" },
+                  "stderr_file": { "type": "string" },
+                  "stdout": { "type": "string" },
+                  "stderr": { "type": "string" }
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "$ref": "common.schema.json#/$defs/errorEnvelope"
+    }
+  ]
+}

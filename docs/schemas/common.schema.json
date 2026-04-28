@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nixihz/qrspi-agent/docs/schemas/common.schema.json",
+  "title": "QRSPI CLI JSON Common Types",
+  "$defs": {
+    "stageCode": {
+      "type": "string",
+      "enum": ["Q", "R", "D", "S", "P", "W", "I", "PR"]
+    },
+    "stage": {
+      "type": "object",
+      "required": ["code", "name", "type", "is_gate", "status"],
+      "properties": {
+        "code": { "$ref": "#/$defs/stageCode" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["alignment", "execution"] },
+        "is_gate": { "type": "boolean" },
+        "status": { "type": "string" },
+        "description": { "type": "string" },
+        "next": {
+          "anyOf": [
+            { "$ref": "#/$defs/stageCode" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "nextAction": {
+      "type": "object",
+      "required": ["kind", "message"],
+      "properties": {
+        "kind": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "artifacts": {
+      "type": "object",
+      "properties": {
+        "latest": { "type": "string" },
+        "structured": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "validation": {
+      "type": "object",
+      "required": ["passed"],
+      "properties": {
+        "passed": { "type": "boolean" },
+        "summary": { "type": "string" },
+        "warnings": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "issues": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "gateReview": {
+      "type": "object",
+      "required": ["stage", "decision", "recordedAt"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/stageCode" },
+        "decision": { "type": "string", "enum": ["approved", "rejected"] },
+        "recordedAt": { "type": "string" },
+        "sourceFile": { "type": "string" },
+        "reviewPath": { "type": "string" },
+        "note": { "type": "string" },
+        "feedback": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "gateReviews": {
+      "type": "object",
+      "required": ["history"],
+      "properties": {
+        "latest": {
+          "anyOf": [
+            { "$ref": "#/$defs/gateReview" },
+            { "type": "null" }
+          ]
+        },
+        "history": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/gateReview" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "errorEnvelope": {
+      "type": "object",
+      "required": ["ok", "command", "error"],
+      "properties": {
+        "ok": { "const": false },
+        "command": { "type": "string" },
+        "feature": { "type": "string" },
+        "error": {
+          "type": "object",
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string" },
+            "message": { "type": "string" },
+            "features": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

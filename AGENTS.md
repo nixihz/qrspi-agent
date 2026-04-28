@@ -114,6 +114,7 @@ Stage definitions are in `packages/qrspi/src/workflow/stage-schema.ts`. Gate pol
 - `WorkflowState`: State machine that manages current stage, artifact storage/retrieval, and state persistence (`state.json`)
 - `EngineState`: Engine runtime state, including approval records, attempt counts, and historical runs (`engine_state.json`)
 - `StageArtifact`: Stage artifact, automatically saved as `artifacts/<STAGE>_<YYYY-MM-DD>.md`
+- `GateReviewRecord`: Human gate review decision, saved in `engine_state.json` and copied to `gate_reviews/<STAGE>_<timestamp>_<decision>.md` when note/feedback content is provided
 - `SliceDefinition` / `WorkTree`: Vertical slice definitions and execution tracking
 - `ContextPack` / `ContextBuilder`: Assemble minimum context based on stage dependencies
 - `ParsedArtifact`: Structured parsing result of stage artifacts, saved to `structured/<STAGE>_<YYYY-MM-DD>.json`
@@ -168,6 +169,8 @@ qrspi context --root <dir> --feature <id>     # View current stage context strat
 qrspi run --lang zh --input "..."             # Use Chinese prompts (default: en)
 ```
 
+Machine-readable output is available through `--json` or `--output json` for `status`, `stage`, `list`, `context`, `run`, `approve`, and `reject`. In JSON mode stdout contains only JSON and exit code still indicates success or failure. `run --json` omits full runner output unless `--include-runner-output` is passed.
+
 Feature-scoped commands (`status`, `stage`, `prompt`, `run`, `approve`, `reject`, `rewind`, `advance`, `slice`, `context`) use the only existing workflow automatically when exactly one exists. If multiple workflows exist under `.qrspi/`, agents must pass `--feature <id>` and must not guess.
 
 ---
@@ -202,6 +205,8 @@ The workflow creates a `.qrspi/<feature_id>/` directory in the target project at
 ├── structured/                 # Structured parsing artifacts (*.json)
 │   ├── Q_2026-04-22.json
 │   └── ...
+├── gate_reviews/               # Human gate review decision markdown
+│   └── D_20260428_101500_approved.md
 ├── runs/                       # Full record of each run
 │   └── <STAGE>_<timestamp>_attempt<N>/
 │       ├── prompt.md

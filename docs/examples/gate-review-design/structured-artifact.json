@@ -1,0 +1,19 @@
+{
+  "stage": "D",
+  "summary": "Use CLI JSON output as the structured integration surface and keep MCP out of the MVP.",
+  "structured_data": {
+    "decisions": [
+      "Use --output text|json and --json for machine-readable CLI facts",
+      "Keep the qrspi CLI as the source of truth",
+      "Persist gate review notes through approve/reject file arguments"
+    ],
+    "rejected_alternatives": [
+      "MCP layer for MVP",
+      "Dashboard as the primary gate review interface"
+    ],
+    "risks": [
+      "JSON schema stability",
+      "Gate review notes lost if they only live in chat"
+    ]
+  }
+}

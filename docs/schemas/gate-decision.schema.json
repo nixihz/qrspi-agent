@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nixihz/qrspi-agent/docs/schemas/gate-decision.schema.json",
+  "title": "QRSPI approve/reject --json",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["ok", "command", "feature", "stage", "next_action"],
+      "properties": {
+        "ok": { "const": true },
+        "command": { "type": "string", "enum": ["approve", "reject"] },
+        "feature": { "type": "string" },
+        "approved_stage": { "$ref": "common.schema.json#/$defs/stageCode" },
+        "rejected_stage": { "$ref": "common.schema.json#/$defs/stageCode" },
+        "stage": { "$ref": "common.schema.json#/$defs/stage" },
+        "next_action": { "$ref": "common.schema.json#/$defs/nextAction" },
+        "gate_review": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/gateReview" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    {
+      "$ref": "common.schema.json#/$defs/errorEnvelope"
+    }
+  ]
+}

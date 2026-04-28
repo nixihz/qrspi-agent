@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add CLI JSON output for `status`, `stage`, `list`, `context`, `run`, `approve`, and `reject` via `--json` / `--output json`.
+- Add structured JSON error envelopes and keep `run --json` runner output opt-in through `--include-runner-output`.
+- Add gate review persistence with `approve --note-file`, `reject --feedback-file`, `engine_state.json` `gate_reviews[]`, and `.qrspi/<feature>/gate_reviews/`.
+- Add `qrspi-gate-review` skill and align the Codex plugin around skills + CLI without MCP or dashboard requirements.
+- Add CLI JSON schema docs and a DESIGN gate review end-to-end fixture/test.
+
 ## 1.1.1 (2026-04-24)
 
 - Fix CLI entry point not executing when run through symlinks (e.g., Volta, npm global bins).

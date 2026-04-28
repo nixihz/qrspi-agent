@@ -117,46 +117,43 @@ npx skills add https://github.com/nixihz/qrspi-agent.git --skill qrspi-cli-workf
 This repository includes a local skill:
 
 - `skills/qrspi-cli-workflow`
+- `skills/qrspi-gate-review`
 
-It guides agents to prefer the `qrspi` CLI over manually simulating the workflow (init, status, prompts, gates, slices, `run`, etc.).
+`qrspi-cli-workflow` guides agents to prefer the `qrspi` CLI over manually simulating the workflow (init, status, prompts, gates, slices, `run`, etc.).
+
+`qrspi-gate-review` guides agents through an interactive one-question-at-a-time review for `D`, `S`, and `PR` gates, then records the decision through `qrspi approve --note-file` or `qrspi reject --feedback-file`.
 
 Installing the skill does not install the `qrspi` CLI. If `qrspi` is not on your `PATH`, install the npm package first or use `npx qrspi-agent`.
 
 ## Codex Plugin Preview
 
-This repository can also be used as a Codex plugin preview. The plugin layer is a thin cockpit around the existing CLI engine:
+This repository can also be used as a Codex plugin preview. The plugin layer stays thin around the existing CLI engine:
 
 ```text
 User intent
   -> Codex Plugin
-  -> qrspi-cli-workflow skill
-  -> QRSPI MCP tools
+  -> skills for SOP, dialogue, and next-step judgment
   -> qrspi CLI state machine
-  -> dashboard preview for gates and progress
+  -> JSON facts, artifacts, and gate decisions
 ```
 
 Preview components:
 
-- `.codex-plugin/plugin.json` declares the plugin metadata, skills, MCP server, hooks, app, starter prompts, and assets.
+- `.codex-plugin/plugin.json` declares the plugin metadata, skills, hooks, starter prompts, and assets.
 - `skills/qrspi-cli-workflow` keeps Codex aligned with the real `qrspi` CLI and gate rules.
-- `packages/qrspi-mcp` exposes structured tools for `list`, `status`, `init`, `run`, and approve/reject.
-- `apps/qrspi-dashboard` is a lightweight dashboard preview for workflow status, artifacts, run logs, and gate actions.
-- `hooks/qrspi-hooks.json` nudges QRSPI-related requests toward the skill/MCP path without skipping human gates.
+- `skills/qrspi-gate-review` turns gate artifacts into explicit approve/reject decisions.
+- `hooks/qrspi-hooks.json` nudges QRSPI-related requests toward the right skill without skipping human gates.
 
-Build the preview packages:
+Build the CLI package:
 
 ```bash
 npm install
 npm run build
 ```
 
-The MCP server is configured in `.mcp.json` and runs:
+No MCP layer is required. The `qrspi` CLI remains the source of truth, and `D`, `S`, and `PR` gates still require explicit human approval.
 
-```bash
-node ./packages/qrspi-mcp/dist/index.js
-```
-
-The MCP layer does not implement a second state machine and does not write `.qrspi` state files directly. The `qrspi` CLI remains the source of truth, and `D`, `S`, and `PR` gates still require explicit human approval.
+Machine-readable CLI output is documented in [docs/cli-json-output.md](docs/cli-json-output.md). Skills and scripts should use `--json` or `--output json` instead of parsing human text.
 
 ### 1. Initialize Workflow
 
@@ -262,7 +259,9 @@ How to choose the next command after `run`:
 | Situation after `qrspi run` | Meaning | Next command |
 |------|------|------|
 | Gate artifact looks good | Accept the current stage output and move forward | `qrspi approve` |
+| Gate review was captured in a markdown note | Accept and store the review record | `qrspi approve --note-file /tmp/design-review.md --json` |
 | Gate artifact needs another try, but upstream assumptions are still fine | Regenerate the same gate stage | `qrspi reject --comment "what to fix"` then `qrspi run` |
+| Gate rejection feedback was captured in a markdown note | Reject, store the feedback record, then regenerate | `qrspi reject --feedback-file /tmp/design-feedback.md --json` then `qrspi run` |
 | The problem started earlier than the current gate | Move back to an earlier stage and regenerate from there | `qrspi rewind <Q/R/D/S/P/W/I> --reason "why"` then `qrspi run` |
 | `I` stage reports `BLOCKED` or `NEEDS_CONTEXT` | Implementation could not finish; inspect the artifact and provide missing context or rewind | `qrspi status`, inspect `.qrspi/.../artifacts/I_<date>.md`, then `qrspi run` or `qrspi rewind ...` |
 
@@ -272,8 +271,15 @@ Common gate examples:
 # D stage looks correct, continue to S
 qrspi approve D
 
+# D stage was reviewed through a saved decision note
+qrspi approve D --note-file /tmp/design-review.md --json
+
 # S stage structure is missing an API boundary, regenerate S
 qrspi reject S --comment "Missing service interface for auth provider"
+qrspi run
+
+# Or reject with saved review feedback
+qrspi reject S --feedback-file /tmp/structure-feedback.md --json
 qrspi run
 
 # PR is wrong because the design itself drifted; rewind to D
@@ -375,6 +381,7 @@ The current version already supports a basic automation chain:
 - Stage outputs are automatically persisted to `artifacts/`
 - Stage results are automatically validated by the validator
 - Artifacts are automatically parsed into structured data saved to `structured/`
+- Gate review notes are copied to `gate_reviews/` when `--note-file` or `--feedback-file` is used
 - `D`, `S`, `PR` stages automatically pause for human confirmation
 - Human reviewers should read `artifacts/<STAGE>_<date>.md`; they may edit that markdown, but should not edit `state.json` or `engine_state.json`
 - `qrspi approve`: advance to next stage after human confirmation

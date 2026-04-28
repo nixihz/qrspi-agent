@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nixihz/qrspi-agent/docs/schemas/status.schema.json",
+  "title": "QRSPI status --json",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["ok", "command", "feature", "stage", "next_action", "artifacts", "gate_reviews", "validation"],
+      "properties": {
+        "ok": { "const": true },
+        "command": { "const": "status" },
+        "feature": { "type": "string" },
+        "stage": { "$ref": "common.schema.json#/$defs/stage" },
+        "next_action": { "$ref": "common.schema.json#/$defs/nextAction" },
+        "artifacts": { "$ref": "common.schema.json#/$defs/artifacts" },
+        "gate_reviews": { "$ref": "common.schema.json#/$defs/gateReviews" },
+        "validation": { "$ref": "common.schema.json#/$defs/validation" }
+      },
+      "additionalProperties": true
+    },
+    {
+      "$ref": "common.schema.json#/$defs/errorEnvelope"
+    }
+  ]
+}
