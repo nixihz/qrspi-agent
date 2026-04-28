@@ -18,7 +18,7 @@ Codex Plugin
 
 MCP 不作为新状态层。如果需要保留或修复 MCP，只能作为 CLI JSON 的薄包装：调用 `qrspi ... --json`，返回结构化事实，不解析 human text，不直接读写 `.qrspi` 状态。
 
-dashboard / workbench 不替代 CLI。当前只允许做 reviewer queue 垂直切片：展示 pending gate、artifact、structured facts、gate history、run log、next command / approve-reject handoff。真实状态变更必须走 `qrspi approve` / `qrspi reject`。
+dashboard / workbench 不替代 CLI。当前 GUI 降级为 preview asset，不作为默认安装的 plugin app，也不作为 workspace-backed 控制台。真实状态查看和变更必须走 `qrspi ... --json`、MCP thin wrapper、`qrspi approve` 或 `qrspi reject`。
 
 ## 1A UI 信息架构
 
@@ -105,7 +105,7 @@ Reviewer 打开 workbench 时的核心情绪不是“探索功能”，而是“
 
 Classifier: **App UI**。Workbench 是 task-focused reviewer tool，不是 marketing / landing page。实现必须使用安静、密集、可扫描的工作台布局。
 
-所有设计决策以根目录 `DESIGN.md` 为准。本节是 1A workbench 的具体化约束；如果后续 UI 与 `DESIGN.md` 冲突，优先更新设计系统或收窄本节，不要在实现里临场发明第三套视觉规则。
+所有设计决策以 `docs/design-system.md` 为准。本节是 1A workbench 的具体化约束；如果后续 UI 与 `docs/design-system.md` 冲突，优先更新设计系统或收窄本节，不要在实现里临场发明第三套视觉规则。
 
 Hard rules:
 
@@ -188,8 +188,8 @@ This keeps the GUI as handoff and evidence preparation, not a second workflow en
 
 ## What already exists
 
-- `DESIGN.md` now defines the project-level design system for QRSPI UI.
-- `apps/qrspi-dashboard` already contains a static dashboard preview with demo data, project folder import, workflow list, stage track, artifact preview, run logs, WorkTree slices, capability list, and command copy.
+- `docs/design-system.md` now defines the project-level design system for QRSPI UI.
+- `apps/qrspi-dashboard` contains a static dashboard preview with demo data, project folder import, workflow list, stage track, artifact preview, run logs, WorkTree slices, capability list, and command copy. It is kept as a preview asset, not the current product surface.
 - `assets/screenshot-dashboard.png` records the current dashboard direction; use it as a before-reference, not as final production design.
 - `packages/qrspi` owns the CLI state machine and JSON output.
 - `skills/qrspi-gate-review` owns the conversational human gate review flow.
@@ -357,7 +357,7 @@ PR 2: Dashboard slice
    - Decision: group implementation by Contract slice and Dashboard slice so tests and review match the actual risk boundaries.
    - Tradeoff: two landable chunks instead of one large mixed PR.
 
-3. `[P2] (confidence: 8/10) apps/qrspi-dashboard/src/index.html:12` — existing UI still has hero-first and "cockpit" copy, which conflicts with `DESIGN.md`.
+3. `[P2] (confidence: 8/10) apps/qrspi-dashboard/src/index.html:12` — existing UI still has hero-first and "cockpit" copy, which conflicts with `docs/design-system.md`.
    - Decision: dashboard slice must remove hero-first structure and use reviewer queue as first viewport.
    - Tradeoff: visual rewrite is required, but the design system already makes the direction unambiguous.
 
@@ -432,7 +432,7 @@ Critical gaps: none after adopting the decisions above. Before those decisions, 
 - Gate review persistence already exists through `approve --note-file` and `reject --feedback-file`.
 - MCP already shells out through `execFile` and wraps CLI JSON output.
 - Dashboard already has demo data, project import, artifact/log display, stage track, WorkTree slice display, and command copy.
-- `DESIGN.md` already defines queue-first, evidence-desk UI rules.
+- `docs/design-system.md` already defines queue-first, evidence-desk UI rules.
 
 ### Worktree Parallelization Strategy
 
@@ -440,7 +440,7 @@ Critical gaps: none after adopting the decisions above. Before those decisions, 
 |------|-----------------|------------|
 | Contract slice | `packages/qrspi/`, `docs/schemas/`, `packages/qrspi-mcp/`, plugin manifests | — |
 | Dashboard data adapter | `apps/qrspi-dashboard/` | Contract slice |
-| Dashboard UI redesign | `apps/qrspi-dashboard/`, `DESIGN.md` if needed | Dashboard data adapter |
+| Dashboard UI redesign | `apps/qrspi-dashboard/`, `docs/design-system.md` if needed | Dashboard data adapter |
 | Verification assets | `assets/`, browser screenshots/test artifacts | Dashboard UI redesign |
 
 Execution order:

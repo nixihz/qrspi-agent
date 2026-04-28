@@ -143,6 +143,7 @@ Preview components:
 - `skills/qrspi-cli-workflow` keeps Codex aligned with the real `qrspi` CLI and gate rules.
 - `skills/qrspi-gate-review` turns gate artifacts into explicit approve/reject decisions.
 - `hooks/qrspi-hooks.json` nudges QRSPI-related requests toward the right skill without skipping human gates.
+- `assets/screenshot-dashboard.png` is a preview asset only. The static dashboard is not installed as the primary plugin app and is not a workspace-backed control surface.
 
 Build the CLI package:
 
@@ -151,7 +152,7 @@ npm install
 npm run build
 ```
 
-No MCP layer is required. The `qrspi` CLI remains the source of truth, and `D`, `S`, and `PR` gates still require explicit human approval.
+The `qrspi` CLI remains the source of truth, and `D`, `S`, and `PR` gates still require explicit human approval. The optional MCP wrapper is only a local JSON wrapper around the CLI.
 
 Machine-readable CLI output is documented in [docs/cli-json-output.md](docs/cli-json-output.md). Skills and scripts should use `--json` or `--output json` instead of parsing human text.
 

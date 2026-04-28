@@ -1,31 +1,74 @@
-# TODOs
+# TODO
 
-## Redesign QRSPI dashboard around reviewer action queue
+## 让阶段上下文组装具备预算意识
 
-- **Status:** Done in this implementation pass.
-- **What:** Rework `apps/qrspi-dashboard` so the first viewport is the reviewer action queue, not a hero-first dashboard.
-- **Why:** The 1A workbench exists to help reviewers find pending gates, inspect risk, and perform approve/reject handoff safely.
-- **Pros:** Aligns implementation with `DESIGN.md` and `docs/codex-plugin-roadmap.zh.md`; makes pending gates, validation state, and required reviewer action visible immediately.
-- **Cons:** Requires layout, copy, contrast, and screenshot updates; current `assets/screenshot-dashboard.png` becomes a before-reference, not final product evidence.
-- **Context:** The design review found the current dashboard reads as a demo poster with low contrast and a marketing-style hero. The plan now requires task-first App UI.
-- **Depends on / blocked by:** Use `DESIGN.md` and the roadmap's `1A UI 信息架构`, `1A Visual Direction and AI Slop Guardrails`, and `1A Responsive and Accessibility Requirements` sections as acceptance criteria.
+- **状态：** 候选 backlog。
+- **内容：** 用分层上下文策略替代完整累积式上下文加载，并让现有上下文预算字段真正控制哪些内容会进入 prompt。
+- **原因：** 目前 `P` 等后续阶段会收到完整的 `Q/R/D/S` artifact。这能降低遗漏风险，但也容易产生重复内容、膨胀 prompt，并让模型关注旧信息或重复细节，而不是当前阶段的具体执行工作。
+- **建议的上下文策略：**
+  - `P` 阶段：完整加载 `S`，加载 `D` 的决策/约束章节，只包含 `Q/R` 的摘要证据或文件指针。
+  - `W` 阶段：优先加载 `P` 和 `S`；更早阶段只作为摘要或关键约束进入上下文。
+  - `I` 阶段：加载相关的 `W/P` slice 上下文，而不是完整 workflow 历史；早期阶段上下文保留为紧凑约束。
+  - `PR` 阶段：优先加载实现报告和测试证据，再加载 plan/work-tree 摘要用于 review framing。
+- **预算控制行为：**
+  - 将 `ContextPack.utilizationTarget` 作为可执行目标，而不只是 metadata。
+  - runner 执行前估算 prompt 大小，并与配置目标比较。
+  - 按固定顺序进行确定性裁剪：可选摘要、旧阶段完整内容、低优先级证据、较长章节正文。
+  - 如果必需上下文仍超过目标，在 `context.json` 和 run metadata 中输出 warning；如果超过 session-switch threshold，则以 `NEEDS_CONTEXT` 或明确的 context-over-budget 错误停止。
+  - 内容被裁剪时保留 artifact 文件指针，让 agent 可以有意识地请求或查看源文件。
+- **验收标准：**
+  - `qrspi context --json` 输出估算 prompt 大小、目标预算、裁剪决策和超预算 warning。
+  - 当前序 artifact 很大时，`qrspi prompt render P` 不再盲目嵌入完整 `Q/R/D/S` artifact。
+  - 测试覆盖阶段级依赖优先级、确定性裁剪和超预算行为。
+  - 文档解释 instruction budget 和 context budget 的区别。
 
-## Verify dashboard responsive and accessibility behavior
+## 为 QRSPI workflow 增加文档输入入口
 
-- **Status:** Done for the 1A release evidence. Desktop/tablet/mobile screenshots and fixed mobile capture are recorded under `~/.gstack/projects/iamx-qrspi-agent/qa-evidence/responsive-dashboard-2026-04-28/`; desktop Chrome accessibility-tree checks are recorded at `~/.gstack/projects/iamx-qrspi-agent/dashboard-qa-20260428-182111.md`. A follow-up can add deeper keyboard-path automation if needed.
-- **What:** After the dashboard redesign, verify desktop, tablet, and mobile layouts plus keyboard-only reviewer flow, focus states, touch targets, and contrast.
-- **Why:** The workbench is a gate review tool; reviewers must be able to inspect evidence and copy approve/reject handoff commands without mouse, wide-screen, or perfect-vision assumptions.
-- **Pros:** Converts the roadmap's responsive/a11y requirements into testable evidence; catches layout and focus regressions before the UI is treated as ready.
-- **Cons:** Requires screenshot capture and manual or automated keyboard-path checks after implementation.
-- **Context:** The design review made 44px touch targets, visible focus, semantic landmarks, non-color-only status, and 4.5:1 body contrast acceptance criteria.
-- **Depends on / blocked by:** Depends on the dashboard redesign being implemented first.
+- **状态：** 建议下一步实现。
+- **内容：** 让用户可以从文档文件启动或渲染 QRSPI workflow，而不是只能传内联 `--input` 字符串。
+- **原因：** 真实需求经常来自 Markdown、PDF、DOCX、飞书导出或粘贴的产品文档。当前 CLI 只暴露 `--input <text>`，长文档通过 shell quoting 传入既别扭又脆弱。
+- **建议范围：**
+  - 给 `qrspi run` 和 `qrspi prompt render` 增加 `--input-file <path>`。
+  - 直接支持 `.md` 和 `.txt`。
+  - 文档中说明推荐桥接路径：PDF/DOCX/PPTX/XLSX/URL 先通过现有 `tomd` skill 转换，再把生成的 Markdown 文件传给 QRSPI。
+  - 在 run context 或 artifact note 中保留源文件路径 metadata，让 reviewer 知道 workflow 是由哪个文档启动的。
+- **验收标准：**
+  - `qrspi run --root . --feature <id> --input-file docs/requirement.md --json` 无需 shell command substitution 即可工作。
+  - `qrspi prompt render Q --root . --feature <id> --input-file docs/requirement.md` 包含文档内容和源路径。
+  - 文件不存在、传入目录、文件不可读时，`--json` 模式输出清晰 JSON 错误。
+  - 文档和 skill 说明非 Markdown 文档的 `tomd -> qrspi --input-file` 路径。
 
-## Generate formal workbench mockups or HTML preview
+## 实现 slice 级自动执行
 
-- **Status:** Superseded for 1A by the implemented static HTML workbench. Optional for future visual iteration.
-- **What:** When the design tooling is available, generate approved mockups or a production-quality HTML preview for the task-first QRSPI Workbench redesign.
-- **Why:** The design review could not generate mockups because the gstack designer binary was unavailable. A visual reference reduces interpretation drift before implementation.
-- **Pros:** Gives implementers a concrete reference for queue-first layout, density, contrast, and command handoff hierarchy.
-- **Cons:** Adds a design artifact step before or during dashboard implementation; may overlap with the redesign work if the same person handles both.
-- **Context:** The roadmap and `DESIGN.md` now define the design rules, but no approved mockup exists for the updated direction.
-- **Depends on / blocked by:** Requires working design tooling, or a manual `/design-html` style HTML preview based on `DESIGN.md` and the roadmap.
+- **状态：** 候选 backlog。
+- **内容：** 将 `WorkTree` slices 作为独立实现单元执行，而不是在一个 runner session 中执行整个 `I` 阶段。
+- **原因：** QRSPI 的 vertical slicing 目前只实现了一部分。`W` 阶段可以定义 slices，但 `I` 阶段仍然作为一个大任务整体运行，这削弱了隔离性、可 review 性和重试行为。
+- **建议范围：**
+  - 在 `.qrspi/<feature_id>/slices/` 下持久化每个 slice 的执行状态。
+  - 每次运行一个 slice，并为它生成独立 prompt、context pack、run directory、validation 和 status。
+  - 将 slice 结果聚合成最终 `I` 阶段 artifact。
+  - gate 推进继续由现有 engine 控制；不要创建第二套状态机。
+- **依赖 / 阻塞：** 需要先做一轮小型 engine 设计，因为这会改变执行语义、run history 和重试行为。
+
+## 在 runner 选择中消费 WorkTree `model_tier`
+
+- **状态：** 候选 backlog。
+- **内容：** 使用每个 slice 的 `model_tier`（`low` / `standard` / `powerful`）自动选择合适的 runner model。
+- **原因：** WorkTree 已经记录了任务复杂度，但 runner 系统目前没有使用它。只有当 slices 能独立执行时，model routing 的价值才会真正体现出来。
+- **建议范围：**
+  - 增加 model-tier resolver，提供明确默认值并支持环境变量覆盖。
+  - 在 run metadata 中记录解析后的 runner/model。
+  - 保持 CLI `--model` 为最高优先级 override。
+- **依赖 / 阻塞：** 最好在 slice 级自动执行之后实现，或与它一起实现。
+
+## 增加 CI/CD 覆盖
+
+- **状态：** 候选 backlog。
+- **内容：** 给仓库增加 CI，运行 TypeScript workspace 的 lint、build 和 test 检查。
+- **原因：** 项目现在已经有 CLI contract、parser 行为、plugin manifest 检查和 dashboard 逻辑，这些都值得用 CI 防止回归。
+- **建议范围：**
+  - 运行 `npm run lint`。
+  - 运行 `cd packages/qrspi && npm test`。
+  - 运行 `cd packages/qrspi && npm run build`。
+  - 在合适的地方缓存 npm dependencies。
+- **验收标准：** Pull request 在 TypeScript 错误、测试失败或 build 输出损坏时失败。
