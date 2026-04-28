@@ -91,6 +91,52 @@
       },
       "additionalProperties": true
     },
+    "runRecord": {
+      "type": "object",
+      "required": ["stage", "attempt", "startedAt", "runDir", "success"],
+      "properties": {
+        "stage": { "$ref": "#/$defs/stageCode" },
+        "attempt": { "type": "number" },
+        "startedAt": { "type": "string" },
+        "finishedAt": { "type": "string" },
+        "runDir": { "type": "string" },
+        "success": { "type": "boolean" },
+        "stdout_file": { "type": "string" },
+        "stderr_file": { "type": "string" },
+        "validation_file": { "type": "string" },
+        "parsed_artifact_file": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "workTreeSummary": {
+      "type": "object",
+      "required": ["path", "slice_count", "slices"],
+      "properties": {
+        "path": { "type": "string" },
+        "slice_count": { "type": "number" },
+        "slices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "description", "order", "checkpoint"],
+            "properties": {
+              "name": { "type": "string" },
+              "description": { "type": "string" },
+              "order": { "type": "number" },
+              "checkpoint": { "type": "string" },
+              "status": { "type": "string" },
+              "dependencies": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "testable": { "type": "boolean" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
     "errorEnvelope": {
       "type": "object",
       "required": ["ok", "command", "error"],

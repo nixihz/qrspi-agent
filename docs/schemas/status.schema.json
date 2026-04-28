@@ -10,10 +10,22 @@
         "ok": { "const": true },
         "command": { "const": "status" },
         "feature": { "type": "string" },
+        "updatedAt": { "type": "string" },
         "stage": { "$ref": "common.schema.json#/$defs/stage" },
         "next_action": { "$ref": "common.schema.json#/$defs/nextAction" },
         "artifacts": { "$ref": "common.schema.json#/$defs/artifacts" },
         "gate_reviews": { "$ref": "common.schema.json#/$defs/gateReviews" },
+        "history": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/runRecord" }
+        },
+        "latest_run": {
+          "anyOf": [
+            { "$ref": "common.schema.json#/$defs/runRecord" },
+            { "type": "null" }
+          ]
+        },
+        "work_tree": { "$ref": "common.schema.json#/$defs/workTreeSummary" },
         "validation": { "$ref": "common.schema.json#/$defs/validation" }
       },
       "additionalProperties": true

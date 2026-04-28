@@ -32,3 +32,4 @@ htmlcov/
 
 # QRSPI workflow state (per-feature)
 .qrspi/
+.gstack/

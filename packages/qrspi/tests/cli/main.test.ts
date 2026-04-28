@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -9,6 +9,7 @@ import {
   readWorkTree,
   readEngineState,
   readWorkflowState,
+  writeWorkTree,
   writeEngineState,
   writeWorkflowState,
 } from "../../src/storage/file-repository.js";
@@ -166,7 +167,42 @@ describe("cli main feature scoping", () => {
   });
 
   it("prints status as a JSON envelope", async () => {
-    await createWorkflow(projectRoot, "design-gate", "D", "waiting_approval");
+    const config = await createWorkflow(projectRoot, "design-gate", "D", "waiting_approval");
+    const runDir = join(projectRoot, ".qrspi", "design-gate", "runs", "D_20260428_100000_attempt1");
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(join(runDir, "runner_stdout.txt"), "D completed and waiting approval", "utf-8");
+    writeFileSync(join(runDir, "runner_stderr.txt"), "", "utf-8");
+    writeFileSync(join(runDir, "validation.json"), "{}", "utf-8");
+    writeFileSync(join(runDir, "parsed_artifact.json"), "{}", "utf-8");
+    await writeWorkTree(config, {
+      slices: [
+        {
+          name: "dashboard-queue",
+          description: "Render reviewer queue from CLI status JSON.",
+          order: 1,
+          tasks: [],
+          checkpoint: "Queue shows pending gates first.",
+          status: "ready",
+          dependencies: [],
+          testable: true,
+        },
+      ],
+    });
+    const engine = await readEngineState(config);
+    await writeEngineState(config, {
+      ...engine!,
+      history: [
+        {
+          stage: "D",
+          attempt: 1,
+          startedAt: "2026-04-28T10:00:00.000Z",
+          finishedAt: "2026-04-28T10:01:00.000Z",
+          runDir,
+          success: true,
+        },
+      ],
+      updatedAt: "2026-04-28T10:01:00.000Z",
+    });
 
     const result = await runCli([
       "node",
@@ -184,6 +220,10 @@ describe("cli main feature scoping", () => {
       feature: string;
       stage: { code: string; is_gate: boolean; status: string };
       next_action: { kind: string };
+      updatedAt: string;
+      history: Array<{ runDir: string; stdout_file: string; validation_file: string }>;
+      latest_run: { runDir: string; stdout_file: string; parsed_artifact_file: string } | null;
+      work_tree: { path: string; slice_count: number; slices: Array<{ name: string; checkpoint: string }> };
     };
 
     expect(result.code).toBe(0);
@@ -197,6 +237,22 @@ describe("cli main feature scoping", () => {
       status: "waiting_approval",
     });
     expect(payload.next_action.kind).toBe("human_gate_review");
+    expect(payload.updatedAt).toBe("2026-04-28T10:01:00.000Z");
+    expect(payload.history).toHaveLength(1);
+    expect(payload.history[0]).toMatchObject({
+      runDir: ".qrspi/design-gate/runs/D_20260428_100000_attempt1",
+      stdout_file: ".qrspi/design-gate/runs/D_20260428_100000_attempt1/runner_stdout.txt",
+      validation_file: ".qrspi/design-gate/runs/D_20260428_100000_attempt1/validation.json",
+    });
+    expect(payload.latest_run).toMatchObject({
+      runDir: ".qrspi/design-gate/runs/D_20260428_100000_attempt1",
+      parsed_artifact_file: ".qrspi/design-gate/runs/D_20260428_100000_attempt1/parsed_artifact.json",
+    });
+    expect(payload.work_tree).toMatchObject({
+      path: ".qrspi/design-gate/slices/work_tree.json",
+      slice_count: 1,
+      slices: [{ name: "dashboard-queue", checkpoint: "Queue shows pending gates first." }],
+    });
   });
 
   it("prints init as a JSON envelope", async () => {

@@ -3,89 +3,88 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>QRSPI Dashboard</title>
+    <title>QRSPI Workbench</title>
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
-    <div class="backdrop" aria-hidden="true"></div>
-    <main class="app-shell">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">QRSPI cockpit</p>
-          <h1>Track every feature from vague request to human-approved PR.</h1>
-          <p class="hero-text">
-            Read real workflow state from a project folder, inspect gate artifacts and run logs,
-            and hand teammates the exact next command without turning the dashboard into a second engine.
-          </p>
+    <div class="app-shell">
+      <header class="utility-bar" aria-label="Workbench controls">
+        <div class="product-mark">
+          <span class="mark-symbol" aria-hidden="true">Q</span>
+          <div>
+            <p class="eyebrow">QRSPI Workbench</p>
+            <h1>Pending gates</h1>
+          </div>
         </div>
 
-        <div class="hero-actions">
-          <button id="open-folder-button" class="primary-action" type="button">Import project folder</button>
-          <button id="use-demo-button" class="secondary-action" type="button">Use demo workspace</button>
-          <button id="refresh-button" class="secondary-action" type="button">Refresh data</button>
+        <section class="source-strip" aria-label="Workspace source">
+          <div>
+            <span class="source-label">Source</span>
+            <strong id="source-mode">Demo CLI JSON</strong>
+          </div>
+          <div>
+            <span class="source-label">Project</span>
+            <strong id="project-root-label">qrspi-agent</strong>
+          </div>
+          <div>
+            <span class="source-label">Workflows</span>
+            <strong id="feature-count-label">3 workflows</strong>
+          </div>
+          <div>
+            <span class="source-label">Refresh</span>
+            <strong id="last-refresh-label">Just now</strong>
+          </div>
+        </section>
+
+        <nav class="utility-actions" aria-label="Import and refresh actions">
+          <button id="open-folder-button" class="secondary-action" type="button">Import folder</button>
+          <button id="use-demo-button" class="secondary-action" type="button">Demo</button>
+          <button id="refresh-button" class="primary-action" type="button">Refresh</button>
           <input id="project-folder-input" type="file" webkitdirectory multiple hidden>
-        </div>
-      </section>
+        </nav>
+      </header>
 
-      <section class="source-bar" aria-label="Workspace source">
-        <div class="source-card">
-          <span class="source-label">Source</span>
-          <strong id="source-mode">Demo workspace</strong>
-        </div>
-        <div class="source-card">
-          <span class="source-label">Project</span>
-          <strong id="project-root-label">qrspi-agent</strong>
-        </div>
-        <div class="source-card">
-          <span class="source-label">Feature count</span>
-          <strong id="feature-count-label">3 workflows</strong>
-        </div>
-        <div class="source-card">
-          <span class="source-label">Last refresh</span>
-          <strong id="last-refresh-label">Just now</strong>
-        </div>
-      </section>
+      <main class="workbench-grid">
+        <section id="empty-state" class="empty-state" hidden>
+          <p class="eyebrow">No workflow data</p>
+          <h2>No QRSPI workflow was found.</h2>
+          <p>Import CLI JSON snapshots or a project folder containing `.qrspi/`, then refresh the queue.</p>
+        </section>
 
-      <section id="empty-state" class="empty-state" hidden>
-        <p class="eyebrow">No workflow data</p>
-        <h2>No `.qrspi/` session was found in the imported folder.</h2>
-        <p>
-          Import the project root that contains `.qrspi/`, or switch back to the built-in demo workspace
-          to review the cockpit flow.
-        </p>
-      </section>
-
-      <section class="dashboard-grid" aria-label="QRSPI workflow dashboard">
-        <aside class="panel workflow-rail">
+        <aside class="panel queue-panel" aria-labelledby="queue-title">
           <div class="panel-head">
             <div>
-              <p class="eyebrow">Workflows</p>
-              <h2>Feature sessions</h2>
+              <p class="eyebrow">Reviewer action queue</p>
+              <h2 id="queue-title">Needs review</h2>
             </div>
             <span id="workflow-summary" class="panel-meta">0 loaded</span>
           </div>
+          <p id="queue-summary" class="panel-note">Waiting gates, blocked runs, and failed stages appear first.</p>
           <div id="workflow-list" class="workflow-list" role="list"></div>
         </aside>
 
-        <section class="main-column">
-          <div class="status-grid" id="status-grid" aria-label="Selected workflow summary"></div>
-
-          <div class="stage-board panel">
+        <section class="detail-column" aria-label="Selected gate detail">
+          <section class="panel decision-panel" aria-labelledby="decision-title">
             <div class="panel-head">
               <div>
-                <p class="eyebrow">Stage track</p>
-                <h2 id="stage-board-title">Questions</h2>
+                <p class="eyebrow">Decision summary</p>
+                <h2 id="decision-title">Selected workflow</h2>
               </div>
-              <span id="stage-board-meta" class="panel-meta">Alignment</span>
+              <span id="decision-status" class="status-pill tone-muted">Ready</span>
             </div>
-            <div id="stage-track" class="stage-track" aria-label="QRSPI stage progression"></div>
-          </div>
+            <div class="decision-grid" id="status-grid" aria-label="Selected workflow facts"></div>
+            <div class="required-action">
+              <span class="source-label">Required action</span>
+              <strong id="required-action-label">Review the current gate artifact.</strong>
+              <p id="required-action-detail">Open the artifact, inspect structured facts, then copy a handoff command.</p>
+            </div>
+          </section>
 
-          <div class="detail-grid">
-            <section class="panel artifact-panel">
+          <section class="evidence-grid" aria-label="Selected workflow evidence">
+            <section class="panel artifact-panel" aria-labelledby="artifact-title">
               <div class="panel-head">
                 <div>
-                  <p class="eyebrow">Current artifact</p>
+                  <p class="eyebrow">Artifact reader</p>
                   <h2 id="artifact-title">No artifact selected</h2>
                 </div>
                 <span id="artifact-meta" class="panel-meta">Waiting for data</span>
@@ -96,77 +95,107 @@
                   <code id="artifact-path">-</code>
                 </div>
                 <div>
+                  <span class="path-label">Structured path</span>
+                  <code id="structured-path">-</code>
+                </div>
+                <div>
                   <span class="path-label">Run log</span>
                   <code id="run-log-path">-</code>
                 </div>
               </div>
-              <pre id="artifact-preview" class="code-preview">Import a project folder or use the demo workspace to inspect the latest artifact.</pre>
+              <pre id="artifact-preview" class="code-preview">Import a project folder or use demo data to inspect the latest artifact.</pre>
             </section>
 
-            <section class="panel command-panel">
+            <section class="panel facts-panel" aria-labelledby="facts-title">
               <div class="panel-head">
                 <div>
-                  <p class="eyebrow">Action deck</p>
-                  <h2>Next commands</h2>
+                  <p class="eyebrow">Structured facts</p>
+                  <h2 id="facts-title">Parsed review context</h2>
                 </div>
-                <button id="copy-command-button" class="ghost-action" type="button">Copy highlighted</button>
+                <span id="facts-meta" class="panel-meta">Unavailable</span>
+              </div>
+              <div id="facts-list" class="facts-list"></div>
+            </section>
+          </section>
+
+          <section class="handoff-grid" aria-label="Commands and review history">
+            <section class="panel command-panel" aria-labelledby="command-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Command handoff</p>
+                  <h2 id="command-title">Copyable next step</h2>
+                </div>
+                <button id="copy-command-button" class="ghost-action" type="button">Copy command</button>
               </div>
               <div id="command-list" class="command-list"></div>
               <div class="command-console">
                 <span class="path-label">Highlighted command</span>
                 <pre id="command-preview" class="code-preview">qrspi status --root .</pre>
               </div>
+              <div class="draft-box">
+                <span class="path-label">Review draft</span>
+                <pre id="review-draft-preview" class="code-preview">Select a waiting gate to generate a note or feedback draft.</pre>
+              </div>
             </section>
-          </div>
 
-          <div class="detail-grid lower-grid">
-            <section class="panel history-panel">
+            <section class="panel history-panel" aria-labelledby="history-title">
               <div class="panel-head">
                 <div>
-                  <p class="eyebrow">Run history</p>
-                  <h2>Attempts and gate flow</h2>
+                  <p class="eyebrow">Gate history</p>
+                  <h2 id="history-title">Reviews and runs</h2>
                 </div>
                 <span id="history-meta" class="panel-meta">0 entries</span>
               </div>
               <div id="history-list" class="history-list"></div>
             </section>
+          </section>
 
-            <section class="panel side-stack">
-              <div class="mini-panel">
-                <div class="panel-head">
-                  <div>
-                    <p class="eyebrow">Run output</p>
-                    <h2 id="log-title">Latest stdout</h2>
-                  </div>
+          <section class="support-grid" aria-label="Secondary workflow context">
+            <section class="panel compact-panel" aria-labelledby="stage-board-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Stage track</p>
+                  <h2 id="stage-board-title">Questions</h2>
                 </div>
-                <pre id="log-preview" class="code-preview">No run log loaded.</pre>
+                <span id="stage-board-meta" class="panel-meta">Alignment</span>
               </div>
-
-              <div class="mini-panel">
-                <div class="panel-head">
-                  <div>
-                    <p class="eyebrow">Vertical slices</p>
-                    <h2 id="slice-title">Work tree</h2>
-                  </div>
-                  <span id="slice-meta" class="panel-meta">0 slices</span>
-                </div>
-                <div id="slice-list" class="slice-list"></div>
-              </div>
-
-              <div class="mini-panel">
-                <div class="panel-head">
-                  <div>
-                    <p class="eyebrow">Capability detection</p>
-                    <h2>Environment</h2>
-                  </div>
-                </div>
-                <ul id="capability-list" class="capability-list"></ul>
-              </div>
+              <div id="stage-track" class="stage-track" aria-label="QRSPI stage progression"></div>
             </section>
-          </div>
+
+            <section class="panel compact-panel" aria-labelledby="log-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Run output</p>
+                  <h2 id="log-title">Latest stdout</h2>
+                </div>
+              </div>
+              <pre id="log-preview" class="code-preview">No run log loaded.</pre>
+            </section>
+
+            <section class="panel compact-panel" aria-labelledby="slice-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">WorkTree slices</p>
+                  <h2 id="slice-title">Work tree</h2>
+                </div>
+                <span id="slice-meta" class="panel-meta">0 slices</span>
+              </div>
+              <div id="slice-list" class="slice-list"></div>
+            </section>
+
+            <section class="panel compact-panel" aria-labelledby="capability-title">
+              <div class="panel-head">
+                <div>
+                  <p class="eyebrow">Capability detection</p>
+                  <h2 id="capability-title">Environment</h2>
+                </div>
+              </div>
+              <ul id="capability-list" class="capability-list"></ul>
+            </section>
+          </section>
         </section>
-      </section>
-    </main>
+      </main>
+    </div>
     <script src="./main.js"></script>
   </body>
 </html>

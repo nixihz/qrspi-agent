@@ -10,6 +10,7 @@ import type {
   SessionConfig,
   StageCode,
   ValidationResult,
+  WorkTree,
   WorkflowState,
 } from "../workflow/types.js";
 import { getNextStage, getStageDefinition, getStageDescription, isGateStage } from "../workflow/stage-schema.js";
@@ -43,6 +44,61 @@ function gateReviewsEnvelope(config: SessionConfig, engineState: EngineState) {
   return {
     latest: reviews.at(-1),
     history: reviews,
+  };
+}
+
+function runRecordEnvelope(config: SessionConfig, record: EngineState["history"][number]) {
+  const runDir = toProjectRelative(config, record.runDir);
+  return {
+    ...record,
+    runDir,
+    stdout_file: toProjectRelative(config, join(record.runDir, "runner_stdout.txt")),
+    stderr_file: toProjectRelative(config, join(record.runDir, "runner_stderr.txt")),
+    validation_file: toProjectRelative(config, join(record.runDir, "validation.json")),
+    parsed_artifact_file: toProjectRelative(config, join(record.runDir, "parsed_artifact.json")),
+  };
+}
+
+function historyEnvelope(config: SessionConfig, engineState: EngineState) {
+  return engineState.history.map((record) => runRecordEnvelope(config, record));
+}
+
+function latestRunEnvelope(config: SessionConfig, engineState: EngineState) {
+  const latest = engineState.history.at(-1);
+  return latest ? runRecordEnvelope(config, latest) : null;
+}
+
+async function readWorkTreeEnvelope(config: SessionConfig): Promise<{
+  path: string;
+  slice_count: number;
+  slices: Array<{
+    name: string;
+    description: string;
+    order: number;
+    checkpoint: string;
+    status?: string;
+    dependencies?: string[];
+    testable?: boolean;
+  }>;
+}> {
+  const layout = resolveFileStoreLayout(config);
+  const workTreePath = join(layout.slicesDir, "work_tree.json");
+  const workTree = await readFile(workTreePath, "utf-8")
+    .then((content) => JSON.parse(content) as WorkTree)
+    .catch(() => ({ slices: [] }));
+
+  return {
+    path: toProjectRelative(config, workTreePath),
+    slice_count: workTree.slices.length,
+    slices: workTree.slices.map((slice) => ({
+      name: slice.name,
+      description: slice.description,
+      order: slice.order,
+      checkpoint: slice.checkpoint,
+      status: slice.status,
+      dependencies: slice.dependencies,
+      testable: slice.testable,
+    })),
   };
 }
 
@@ -136,10 +192,14 @@ export async function buildStatusJson(
     ok: true,
     command,
     feature: config.featureId,
+    updatedAt: engineState.updatedAt,
     stage: stageEnvelope(state, engineState),
     next_action: nextAction(state, engineState),
     artifacts: await buildArtifactsEnvelope(config, state.currentStage),
     gate_reviews: gateReviewsEnvelope(config, engineState),
+    history: historyEnvelope(config, engineState),
+    latest_run: latestRunEnvelope(config, engineState),
+    work_tree: await readWorkTreeEnvelope(config),
     validation: {
       passed: engineState.status !== "failed",
       warnings: [],
