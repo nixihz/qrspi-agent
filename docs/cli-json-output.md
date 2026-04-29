@@ -113,7 +113,54 @@ Returns:
 qrspi context --root . --feature <id> --json
 ```
 
-Returns the current context strategy and dependency artifact summaries.
+Returns the current context strategy, dependency artifact summaries, and
+budget audit data. The old `target_max_percent` and
+`switch_threshold_percent` fields remain present; newer consumers can also use
+the additive fields below.
+
+```json
+{
+  "current_stage": "P",
+  "dependencies": [
+    {
+      "stage": "Q",
+      "required": false,
+      "layer": "summary",
+      "artifact_path": ".qrspi/auth/artifacts/Q_2026-04-29.md",
+      "original_estimate": { "characters": 12000, "lines": 320 },
+      "included_estimate": { "characters": 800, "lines": 24 },
+      "truncated": true
+    }
+  ],
+  "context_budget": {
+    "target_max_percent": 40,
+    "switch_threshold_percent": 60,
+    "mode": "layered",
+    "unit": "character",
+    "max_context_size": 20000,
+    "target_size": 8000,
+    "switch_threshold_size": 12000,
+    "status": "over_target",
+    "prompt_estimate": { "characters": 9000, "lines": 180 },
+    "context_estimate": { "characters": 9000, "lines": 180 },
+    "warnings": [
+      { "code": "context_over_target", "severity": "warning", "message": "..." }
+    ],
+    "truncation_decisions": [
+      {
+        "stage": "Q",
+        "fromLayer": "summary",
+        "toLayer": "pointer",
+        "reason": "optional_summary",
+        "artifactPath": ".qrspi/auth/artifacts/Q_2026-04-29.md"
+      }
+    ]
+  }
+}
+```
+
+Use `--context-mode full` on `context`, `prompt render`, or `run` to keep the
+legacy complete-artifact behavior for debugging.
 
 ### `run`
 
@@ -156,6 +203,12 @@ qrspi run --root . --feature <id> --json --include-runner-output
 `ok: false` JSON envelope in JSON mode with codes such as `INPUT_CONFLICT`,
 `INPUT_FILE_NOT_FOUND`, `INPUT_FILE_IS_DIRECTORY`,
 `INPUT_FILE_UNSUPPORTED_TYPE`, and `INPUT_FILE_UNREADABLE`.
+
+When budgeted context crosses the session-switch threshold, `run --json`
+returns `ok: false`, leaves the workflow on the current stage with
+`engine_status: "needs_context"`, and records `lastContextError.code` as
+`context_over_budget` in `engine_state.json`. The runner is not called in that
+case; inspect the run directory's `context.json` for the full audit.
 
 ### `approve` / `reject`
 

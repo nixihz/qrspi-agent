@@ -19,6 +19,7 @@ import type {
   CliResponseEnvelope,
   ContextPack,
   ContextCommandData,
+  BudgetedContextPack,
   CurrentGateContext,
   EngineState,
   FeatureListItem,
@@ -44,6 +45,10 @@ import type {
   WorkflowInputMetadata,
 } from "../workflow/types.js";
 import { getNextStage, getStageDefinition, getStageDescription, getStageOrder, isGateStage } from "../workflow/stage-schema.js";
+import {
+  buildContextCommandBudgetData,
+  buildContextCommandDependencyData,
+} from "../context/context-builder.js";
 
 interface CommandErrorInput {
   command: string;
@@ -585,6 +590,55 @@ export async function buildContextJson(
   state: WorkflowState,
   context: ContextPack,
 ): Promise<CliResponseEnvelope<ContextCommandData>> {
+  if (isBudgetedContextPack(context)) {
+    const data: ContextCommandData = {
+      current_stage: state.currentStage,
+      dependencies: context.dependencies.map((dependency) => {
+        const item = buildContextCommandDependencyData(dependency);
+        return {
+          ...item,
+          artifact_path: item.artifact_path ? toProjectRelative(config, item.artifact_path) : undefined,
+          structured_path: item.structured_path ? toProjectRelative(config, item.structured_path) : undefined,
+          pointer: item.pointer
+            ? {
+              ...item.pointer,
+              artifactPath: toProjectRelative(config, item.pointer.artifactPath),
+              structuredPath: item.pointer.structuredPath
+                ? toProjectRelative(config, item.pointer.structuredPath)
+                : undefined,
+            }
+            : undefined,
+        };
+      }),
+      context_budget: {
+        ...buildContextCommandBudgetData(context),
+        truncation_decisions: context.budget.truncationDecisions.map((decision) => ({
+          ...decision,
+          artifactPath: toProjectRelative(config, decision.artifactPath),
+          pointer: {
+            ...decision.pointer,
+            artifactPath: toProjectRelative(config, decision.pointer.artifactPath),
+            structuredPath: decision.pointer.structuredPath
+              ? toProjectRelative(config, decision.pointer.structuredPath)
+              : undefined,
+          },
+        })),
+        warnings: context.budget.warnings.map((warning) => ({
+          ...warning,
+          artifactPath: warning.artifactPath
+            ? toProjectRelative(config, warning.artifactPath)
+            : undefined,
+        })),
+      },
+    };
+
+    return createCliEnvelope("context", {
+      ok: true,
+      featureId: config.featureId,
+      data,
+    });
+  }
+
   const dependencies = await Promise.all(
     context.dependencies.map((dep) => resolveArtifactPointer(config, dep.stage, "markdown")),
   );
@@ -603,6 +657,10 @@ export async function buildContextJson(
     featureId: config.featureId,
     data,
   });
+}
+
+function isBudgetedContextPack(context: ContextPack): context is BudgetedContextPack {
+  return "budget" in context;
 }
 
 async function runnerOutputForResult(

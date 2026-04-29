@@ -314,15 +314,23 @@ Model: kimi-for-coding
 ```bash
 # 查看当前 Context 策略
 qrspi context
+qrspi context --json
+
+# 排障时保留旧的完整产物加载行为
+qrspi prompt render P --context-mode full
+qrspi run --context-mode full
 
 # 查看指令预算报告
 qrspi budget
 ```
 
 **规则:**
-- Context 利用率保持在 **40% 以下**
-- 达到 **60%** 时强制切换 Session
-- 进度持久化到磁盘，新 Session 加载当前阶段所需的完整前置产物
+- 指令预算控制每个阶段模板本身的指令数量（8-13 条）。
+- Context budget 控制进入 prompt 的项目产物内容。
+- 默认使用 layered 模式：越靠近当前阶段的产物保留越完整，更早阶段会降级为 focused 摘要或 artifact pointer。
+- 目标线是配置上下文大小的 **40%**；超过后继续运行，但会在 `context.json` 和 `runner_meta.json` 记录 warning。
+- 达到 **60%** session-switch 阈值时，在调用 runner 前以 `context_over_budget` 停止。
+- 排障或兼容旧行为时可用 `--context-mode full`，完整加载当前阶段的前置产物。
 
 ### 2. 垂直切片（优于水平分层）
 
@@ -496,6 +504,9 @@ qrspi-agent/
 ### 洞察一: Context Window 利用率保持在 40% 以下
 
 > 达到 60% 时，开始新会话。这与 context window 有多大无关。
+
+运行时上下文组装现在会按估算 context budget 执行：
+`layered` 模式优先保留离当前阶段最近的产物，将更早阶段降级为摘要或指针，并在超过 60% 阈值时于调用 runner 前停止。
 
 **实践:** 每个垂直切片后保存进度，启动加载当前阶段所需完整前置产物的新 Session。
 

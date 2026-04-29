@@ -3,7 +3,11 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-import { buildContextPack, summarizeArtifact } from "../../src/context/context-builder.js";
+import {
+  buildBudgetedContextPack,
+  buildContextPack,
+  summarizeArtifact,
+} from "../../src/context/context-builder.js";
 import { initializeSessionDirectories, writeArtifact } from "../../src/storage/file-repository.js";
 import type { SessionConfig } from "../../src/workflow/types.js";
 
@@ -52,5 +56,69 @@ describe("context builder", () => {
     const content = ["line 1", "line 2", "line 3"].join("\n");
 
     expect(summarizeArtifact(content, 2)).toBe("line 1\nline 2\n\n...(truncated, original 3 lines)...");
+  });
+
+  it("keeps full artifact content in full budget mode", async () => {
+    const content = Array.from({ length: 80 }, (_, i) => `### Q${i + 1}: Question`).join("\n");
+    await writeArtifact(config, {
+      stage: "Q",
+      title: "Q - Questions",
+      content,
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+
+    const context = await buildBudgetedContextPack("R", config, {
+      budgetConfig: { mode: "full" },
+    });
+
+    expect(context.dependencies).toHaveLength(1);
+    expect(context.dependencies[0].includedContent).toBe(content);
+    expect(context.dependencies[0].layer).toBe("full");
+  });
+
+  it("uses layered context for P and does not embed large Q/R history wholesale", async () => {
+    const largeQ = Array.from({ length: 160 }, (_, i) => `### Q${i + 1}: Question ${i + 1}`).join("\n");
+    const largeR = Array.from({ length: 160 }, (_, i) => `## Q${i + 1}: Finding ${i + 1}`).join("\n");
+    await writeArtifact(config, {
+      stage: "Q",
+      title: "Q - Questions",
+      content: largeQ,
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+    await writeArtifact(config, {
+      stage: "R",
+      title: "R - Research",
+      content: largeR,
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+    await writeArtifact(config, {
+      stage: "D",
+      title: "D - Design",
+      content: "## Design Decisions\n- Use budgeted context\n## Risks\n- Missing evidence",
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+    await writeArtifact(config, {
+      stage: "S",
+      title: "S - Structure",
+      content: "export interface ContextBudgetConfig {}\nexport function buildBudgetedContextPack() {}",
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+
+    const context = await buildBudgetedContextPack("P", config);
+    const qDep = context.dependencies.find((dep) => dep.stage === "Q")!;
+    const rDep = context.dependencies.find((dep) => dep.stage === "R")!;
+    const sDep = context.dependencies.find((dep) => dep.stage === "S")!;
+
+    expect(qDep.layer).toBe("summary");
+    expect(rDep.layer).toBe("summary");
+    expect(sDep.layer).toBe("full");
+    expect(qDep.includedContent).not.toBe(largeQ);
+    expect(rDep.includedContent).not.toBe(largeR);
+    expect(context.budget.dependencies.map((dep) => dep.stage)).toEqual(["Q", "R", "D", "S"]);
   });
 });

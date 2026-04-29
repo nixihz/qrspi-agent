@@ -12,7 +12,7 @@ import {
   rewindWorkflowStage,
   advanceWorkflowStage,
 } from "../../src/engine/engine.js";
-import { writeWorkflowState, writeEngineState } from "../../src/storage/file-repository.js";
+import { writeWorkflowState, writeEngineState, writeArtifact } from "../../src/storage/file-repository.js";
 
 function createTempConfig(featureId = "test-feature"): SessionConfig {
   const tmpDir = mkdtempSync(join(tmpdir(), "qrspi-engine-test-"));
@@ -26,12 +26,14 @@ function createTempConfig(featureId = "test-feature"): SessionConfig {
 class TestRunner implements Runner {
   name = "mock" as const;
   private output: string;
+  calls = 0;
 
   constructor(output: string) {
     this.output = output;
   }
 
   async run(_input: RunnerExecInput) {
+    this.calls++;
     return {
       stdout: this.output,
       stderr: "",
@@ -218,6 +220,84 @@ describe("engine", () => {
     expect(result.validation.valid).toBe(false);
     expect(result.engineState.status).toBe("failed");
     expect(result.validation.summary).toContain("successful I stage");
+  });
+
+  it("runSingleStage records over-target context budget and still calls the runner", async () => {
+    await initWorkflow(config);
+    const now = new Date().toISOString();
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "P" as const,
+      status: "idle" as const,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "P" as const,
+      status: "ready" as const,
+      approvals: [],
+      gate_reviews: [],
+      stage_attempts: {},
+      history: [],
+      updatedAt: now,
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+    await writeArtifact(config, { stage: "S", title: "S", content: "S".repeat(9000), generatedAt: now, artifactPath: "" });
+
+    const runner = new TestRunner(Array.from({ length: 15 }, (_, i) => `plan line ${i}`).join("\n"));
+    const result = await runSingleStage(config, wf, eng, runner);
+    const runsDir = join(config.projectRoot, ".qrspi", config.featureId, "runs");
+    const [runDirName] = readdirSync(runsDir).sort();
+    const runnerMeta = JSON.parse(
+      readFileSync(join(runsDir, runDirName!, "runner_meta.json"), "utf-8"),
+    ) as { context_budget: { status: string; warningCount: number } };
+
+    expect(runner.calls).toBe(1);
+    expect(result.validation.valid).toBe(true);
+    expect(result.engineState.history[0].contextBudgetStatus).toBe("over_target");
+    expect(runnerMeta.context_budget.status).toBe("over_target");
+    expect(runnerMeta.context_budget.warningCount).toBeGreaterThan(0);
+  });
+
+  it("runSingleStage stops before runner when required context exceeds the threshold", async () => {
+    await initWorkflow(config);
+    const now = new Date().toISOString();
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "P" as const,
+      status: "idle" as const,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "P" as const,
+      status: "ready" as const,
+      approvals: [],
+      gate_reviews: [],
+      stage_attempts: {},
+      history: [],
+      updatedAt: now,
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+    await writeArtifact(config, { stage: "S", title: "S", content: "S".repeat(13000), generatedAt: now, artifactPath: "" });
+
+    const runner = new TestRunner(Array.from({ length: 15 }, (_, i) => `plan line ${i}`).join("\n"));
+    const result = await runSingleStage(config, wf, eng, runner);
+    const runsDir = join(config.projectRoot, ".qrspi", config.featureId, "runs");
+    const [runDirName] = readdirSync(runsDir).sort();
+    const context = JSON.parse(
+      readFileSync(join(runsDir, runDirName!, "context.json"), "utf-8"),
+    ) as { budget: { status: string } };
+
+    expect(runner.calls).toBe(0);
+    expect(result.validation.valid).toBe(false);
+    expect(result.engineState.status).toBe("needs_context");
+    expect(result.engineState.lastContextError?.code).toBe("context_over_budget");
+    expect(context.budget.status).toBe("over_threshold");
   });
 
   it("approveCurrentStage approves gate and advances", async () => {

@@ -41,7 +41,12 @@ import {
   resolveArtifactPointer,
 } from "../storage/file-repository.js";
 import { resolveFileStoreLayout, buildRunDirName } from "../storage/path-resolver.js";
-import { buildContextPack } from "../context/context-builder.js";
+import { buildBudgetedContextPack } from "../context/context-builder.js";
+import {
+  assertContextWithinThreshold,
+  buildRunnerContextBudgetMeta,
+  updateContextBudgetForPrompt,
+} from "../context/context-budget.js";
 import { createPromptRegistry, renderStagePrompt } from "../prompts/template-registry.js";
 import { validateStageArtifact } from "../validators/stage-validator.js";
 import { parseStageOutput, type ParsedArtifact } from "../parsers/artifact-parser.js";
@@ -62,6 +67,7 @@ export async function runSingleStage(
   lang: Lang = "en",
   runnerOptions: RunnerOptions = {},
   workflowInput?: WorkflowInputMetadata,
+  contextMode: RunWorkflowOptions["contextMode"] = "layered",
 ): Promise<RunSingleStageResult> {
   const stage = workflowState.currentStage;
   const attempt = (engineState.stage_attempts[stage] ?? 0) + 1;
@@ -75,13 +81,16 @@ export async function runSingleStage(
   };
 
   try {
-    const contextPack = await buildContextPack(stage, config);
+    const contextPack = await buildBudgetedContextPack(stage, config, {
+      workflowInput,
+      budgetConfig: { mode: contextMode },
+    });
     const runContextPack = workflowInput && workflowInput.input_source !== "none"
       ? { ...contextPack, workflow_input: workflowInput }
       : contextPack;
 
     const registry = createPromptRegistry();
-    const prompt = renderStagePrompt(registry, {
+    const initialPrompt = renderStagePrompt(registry, {
       featureId: config.featureId,
       stage,
       userInput,
@@ -89,11 +98,59 @@ export async function runSingleStage(
       context: runContextPack,
       lang,
     });
+    const budget = updateContextBudgetForPrompt(runContextPack.budget, initialPrompt);
+    const finalizedContextPack = { ...runContextPack, budget };
+    const prompt = renderStagePrompt(registry, {
+      featureId: config.featureId,
+      stage,
+      userInput,
+      workflowInput,
+      context: finalizedContextPack,
+      lang,
+    });
 
     await writeRunFile(runDir, "prompt.md", prompt);
-    await writeRunFile(runDir, "context.json", runContextPack);
+    await writeRunFile(runDir, "context.json", finalizedContextPack);
     await writeRunFile(runDir, "live_stdout.txt", "");
     await writeRunFile(runDir, "live_stderr.txt", "");
+
+    const contextError = assertContextWithinThreshold(stage, finalizedContextPack.budget);
+    if (contextError) {
+      const blockedEngineState: EngineState = {
+        ...updatedEngineState,
+        status: "needs_context",
+        lastError: contextError.message,
+        lastContextError: contextError,
+        history: [
+          ...updatedEngineState.history,
+          {
+            stage,
+            attempt,
+            startedAt,
+            finishedAt: new Date().toISOString(),
+            runDir,
+            success: false,
+            contextBudgetStatus: finalizedContextPack.budget.status,
+            contextBudgetWarnings: finalizedContextPack.budget.warnings.length,
+          },
+        ],
+        updatedAt: new Date().toISOString(),
+      };
+      await writeEngineState(config, blockedEngineState);
+      const blockedWorkflowState = transitionWorkflowState(workflowState, stage, "needs_context");
+      await writeWorkflowState(config, blockedWorkflowState);
+
+      return {
+        workflowState: blockedWorkflowState,
+        engineState: blockedEngineState,
+        validation: {
+          stage,
+          valid: false,
+          issues: [{ severity: "error", message: contextError.message }],
+          summary: `Context over budget: ${contextError.message}`,
+        },
+      };
+    }
 
     const preconditionFailure = getStagePreconditionFailure(stage, updatedEngineState);
     if (preconditionFailure) {
@@ -118,6 +175,7 @@ export async function runSingleStage(
       exit_code: runnerResult.exitCode,
       live_stdout_file: join(runDir, "live_stdout.txt"),
       live_stderr_file: join(runDir, "live_stderr.txt"),
+      context_budget: buildRunnerContextBudgetMeta(finalizedContextPack.budget),
       ...runnerResult.meta,
     });
 
@@ -139,6 +197,8 @@ export async function runSingleStage(
             finishedAt: new Date().toISOString(),
             runDir,
             success: false,
+            contextBudgetStatus: finalizedContextPack.budget.status,
+            contextBudgetWarnings: finalizedContextPack.budget.warnings.length,
           },
         ],
         updatedAt: new Date().toISOString(),
@@ -193,6 +253,8 @@ export async function runSingleStage(
             finishedAt: new Date().toISOString(),
             runDir,
             success: false,
+            contextBudgetStatus: finalizedContextPack.budget.status,
+            contextBudgetWarnings: finalizedContextPack.budget.warnings.length,
           },
         ],
         updatedAt: new Date().toISOString(),
@@ -218,6 +280,7 @@ export async function runSingleStage(
       ...updatedEngineState,
       status: isGateStage(stage) ? "waiting_approval" : "ready",
       lastError: "",
+      lastContextError: undefined,
       history: [
         ...updatedEngineState.history,
         {
@@ -227,6 +290,8 @@ export async function runSingleStage(
           finishedAt: new Date().toISOString(),
           runDir,
           success: true,
+          contextBudgetStatus: finalizedContextPack.budget.status,
+          contextBudgetWarnings: finalizedContextPack.budget.warnings.length,
         },
       ],
       updatedAt: new Date().toISOString(),
@@ -334,6 +399,7 @@ export async function runWorkflow(
         source_file: options.workflowInput.source_file,
         file_kind: options.workflowInput.file_kind,
       } : undefined,
+      options.contextMode ?? "layered",
     );
 
     results.push(result);

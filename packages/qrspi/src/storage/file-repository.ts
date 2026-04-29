@@ -234,6 +234,7 @@ export async function readEngineState(
     stage_attempts: (raw.stage_attempts as Partial<Record<StageCode, number>> | undefined) ?? {},
     history: Array.isArray(raw.history) ? raw.history as EngineState["history"] : [],
     lastError: typeof raw.lastError === "string" ? raw.lastError : "",
+    lastContextError: raw.lastContextError as EngineState["lastContextError"],
     updatedAt: typeof raw.updatedAt === "string"
       ? raw.updatedAt
       : typeof raw.updated_at === "string"

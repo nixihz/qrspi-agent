@@ -82,7 +82,8 @@ import {
   isValidStageCode,
 } from "../workflow/stage-schema.js";
 import { createPromptRegistry, renderStagePrompt } from "../prompts/template-registry.js";
-import { buildContextPack } from "../context/context-builder.js";
+import { buildBudgetedContextPack } from "../context/context-builder.js";
+import { updateContextBudgetForPrompt } from "../context/context-budget.js";
 
 const require = createRequire(import.meta.url);
 const { version: VERSION } = require("../../package.json") as { version: string };
@@ -395,13 +396,30 @@ export async function handlePromptCommand(opts: PromptCommandOptions): Promise<n
   }
   const workflowInputMetadata = createWorkflowInputMetadata(workflowInput);
   const registry = createPromptRegistry();
-  const context = await buildContextPack(opts.stage, config);
-  const prompt = renderStagePrompt(registry, {
+  const context = await buildBudgetedContextPack(opts.stage, config, {
+    workflowInput: workflowInputMetadata,
+    budgetConfig: {
+      mode: opts.contextMode ?? "layered",
+    },
+  });
+  const initialPrompt = renderStagePrompt(registry, {
     featureId: config.featureId,
     stage: opts.stage,
     userInput: workflowInput.content,
     workflowInput: workflowInputMetadata,
     context,
+    lang: opts.lang,
+  });
+  const finalizedContext = {
+    ...context,
+    budget: updateContextBudgetForPrompt(context.budget, initialPrompt),
+  };
+  const prompt = renderStagePrompt(registry, {
+    featureId: config.featureId,
+    stage: opts.stage,
+    userInput: workflowInput.content,
+    workflowInput: workflowInputMetadata,
+    context: finalizedContext,
     lang: opts.lang,
   });
   print(prompt);
@@ -806,16 +824,32 @@ export async function handleContextCommand(
   }
 
   const state = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
-  const context = await buildContextPack(state.currentStage, config);
+  const context = await buildBudgetedContextPack(state.currentStage, config, {
+    budgetConfig: {
+      mode: opts.contextMode ?? "layered",
+    },
+  });
+  const registry = createPromptRegistry();
+  const prompt = renderStagePrompt(registry, {
+    featureId: config.featureId,
+    stage: state.currentStage,
+    context,
+    lang: opts.lang,
+  });
+  const finalizedContext = {
+    ...context,
+    budget: updateContextBudgetForPrompt(context.budget, prompt),
+  };
   if (isJsonOutputRequested(opts)) {
-    writeCliResponse(await buildContextJson(config, state, context), "json");
+    writeCliResponse(await buildContextJson(config, state, finalizedContext), "json");
     return 0;
   }
 
   print(`Current Stage: ${state.currentStage}`);
-  print(`Dependency count: ${context.dependencies.length}`);
-  for (const dep of context.dependencies) {
-    print(`  - ${dep.stage}: ${dep.summary.split("\n")[0]}`);
+  print(`Dependency count: ${finalizedContext.dependencies.length}`);
+  print(`Context budget: ${finalizedContext.budget.status} (${finalizedContext.budget.promptEstimate.characters} chars estimated)`);
+  for (const dep of finalizedContext.dependencies) {
+    print(`  - ${dep.stage} [${dep.layer}]: ${dep.summary.split("\n")[0]}`);
   }
   return 0;
 }
@@ -888,6 +922,7 @@ export async function main(argv?: string[]): Promise<number> {
       .description("Render a workflow-aware stage prompt")
       .option("--input <text>", "User input")
       .option("--input-file <path>", "Read user input from a .md or .txt file")
+      .option("--context-mode <mode>", "Context budget mode (layered/full)", "layered")
   ).action(async (stage: string, opts: PromptCommandOptions) => {
     const code = await handlePromptCommand({ ...opts, stage: stage as StageCode });
     process.exitCode = code;
@@ -913,6 +948,7 @@ export async function main(argv?: string[]): Promise<number> {
       .option("--max-stages <n>", "Maximum stages to execute", parseInt)
       .option("--no-stop-at-gate", "Do not stop at gate stages")
       .option("--include-runner-output", "Include runner stdout/stderr in JSON output", false)
+      .option("--context-mode <mode>", "Context budget mode (layered/full)", "layered")
   ).action(async (opts: RunCommandOptions) => {
     const code = await handleRunCommand(opts);
     process.exitCode = code;
@@ -1004,7 +1040,10 @@ export async function main(argv?: string[]): Promise<number> {
   });
 
   featureScopedOpts(
-    program.command("context").description("Show current context strategy")
+    program
+      .command("context")
+      .description("Show current context strategy")
+      .option("--context-mode <mode>", "Context budget mode (layered/full)", "layered")
   ).action(async (opts: FeatureScopedCommandOptions) => {
     const code = await handleContextCommand(opts);
     process.exitCode = code;

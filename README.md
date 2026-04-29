@@ -357,15 +357,23 @@ Model: kimi-for-coding
 ```bash
 # View current context strategy
 qrspi context
+qrspi context --json
+
+# Render or run with the old complete-artifact behavior when debugging
+qrspi prompt render P --context-mode full
+qrspi run --context-mode full
 
 # View instruction budget report
 qrspi budget
 ```
 
 **Rules:**
-- Keep context utilization **below 40%**
-- Force session switch at **60%**
-- Progress is persisted to disk; new sessions load the complete prerequisite artifacts for the current stage
+- The instruction budget keeps each stage template small (8-13 instructions).
+- The context budget controls project artifact content that enters the prompt.
+- Layered mode is the default: later stages keep nearby artifacts fuller and downgrade older artifacts to focused summaries or pointers.
+- The target is **40%** of the configured context size; crossing it records warnings in `context.json` and `runner_meta.json`.
+- Crossing the **60%** session-switch threshold stops before the runner with `context_over_budget`.
+- Use `--context-mode full` to keep the old complete prerequisite artifact loading behavior for debugging.
 
 ### 2. Vertical Slices (Better Than Horizontal Layers)
 
@@ -540,6 +548,11 @@ qrspi-agent/
 ### Insight One: Keep Context Window Utilization Below 40%
 
 > At 60%, start a new session. This is independent of how large the context window is.
+
+Runtime context assembly now enforces this as an estimated context budget:
+`layered` mode keeps the closest stage artifacts richest, downgrades older
+artifacts to summaries or pointers, and stops before runner execution when the
+60% threshold is exceeded.
 
 **Practice:** Save progress after each vertical slice, start a new session that loads the complete prerequisite artifacts needed for the current stage.
 

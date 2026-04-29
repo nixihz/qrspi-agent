@@ -173,8 +173,8 @@ export interface ListCommandData {
 
 export interface ContextCommandData {
   current_stage: StageCode;
-  dependencies: ArtifactPointer[];
-  context_budget: {
+  dependencies: Array<ArtifactPointer | ContextCommandDependencyData>;
+  context_budget: ContextCommandBudgetData | {
     target_max_percent: number;
     switch_threshold_percent: number;
   };
@@ -261,6 +261,8 @@ export interface EngineRunRecord {
   finishedAt?: string;
   runDir: string;
   success: boolean;
+  contextBudgetStatus?: ContextBudgetStatus;
+  contextBudgetWarnings?: number;
 }
 
 export interface EngineState {
@@ -272,6 +274,7 @@ export interface EngineState {
   stage_attempts: Partial<Record<StageCode, number>>;
   history: EngineRunRecord[];
   lastError?: string;
+  lastContextError?: ContextOverBudgetError;
   updatedAt: string;
 }
 
@@ -293,6 +296,220 @@ export interface ContextPack {
   maxLinesPerArtifact: number;
   utilizationTarget: number;
   workflow_input?: WorkflowInputMetadata;
+}
+
+export type ContextBudgetMode = "layered" | "full";
+
+export type ContextBudgetUnit = "character" | "line";
+
+export type ContextLayer = "full" | "focused" | "summary" | "pointer";
+
+export type ContextBudgetStatus = "within_target" | "over_target" | "over_threshold";
+
+export type ContextWarningSeverity = "info" | "warning" | "error";
+
+export interface ContextBudgetConfig {
+  mode: ContextBudgetMode;
+  unit: ContextBudgetUnit;
+  targetUtilization: number;
+  switchThresholdUtilization: number;
+  maxContextSize: number;
+  includeBudgetNoteInPrompt: boolean;
+}
+
+export interface ContextSizeEstimate {
+  characters: number;
+  lines: number;
+  estimatedTokens?: number;
+}
+
+export interface ContextBudgetLimit {
+  targetSize: number;
+  switchThresholdSize: number;
+  maxContextSize: number;
+  targetPercent: number;
+  switchThresholdPercent: number;
+}
+
+export interface ContextBudgetWarning {
+  code:
+    | "context_over_target"
+    | "context_over_threshold"
+    | "dependency_missing"
+    | "structured_artifact_missing"
+    | "structured_artifact_stale"
+    | "content_truncated";
+  severity: ContextWarningSeverity;
+  message: string;
+  stage?: StageCode;
+  artifactPath?: string;
+}
+
+export interface ContextPointer {
+  stage: StageCode;
+  artifactPath: string;
+  structuredPath?: string;
+  sectionTitle?: string;
+  reason: string;
+}
+
+export interface ContextSection {
+  id: string;
+  title: string;
+  content: string;
+  estimate: ContextSizeEstimate;
+  source: ContextPointer;
+  priority: number;
+  required: boolean;
+}
+
+export interface FocusedContextData {
+  decisions?: string[];
+  constraints?: string[];
+  risks?: string[];
+  evidence?: string[];
+  files?: string[];
+  interfaces?: string[];
+  functions?: string[];
+  slices?: string[];
+  tests?: string[];
+  changes?: string[];
+  rollback?: string[];
+}
+
+export interface ContextSourceArtifact {
+  stage: StageCode;
+  artifactPath: string;
+  structuredPath?: string;
+  rawContent: string;
+  structuredData?: unknown;
+  estimate: ContextSizeEstimate;
+  missing: boolean;
+  warnings: ContextBudgetWarning[];
+}
+
+export interface StageLayerRule {
+  stage: StageCode;
+  layer: ContextLayer;
+  required: boolean;
+  priority: number;
+  focusedFields?: Array<keyof FocusedContextData>;
+  maxSize?: number;
+}
+
+export interface StageContextProfile {
+  currentStage: StageCode;
+  rules: StageLayerRule[];
+}
+
+export interface DependencyContextPlan {
+  dependency: ContextDependency;
+  layer: ContextLayer;
+  required: boolean;
+  priority: number;
+  focusedFields: Array<keyof FocusedContextData>;
+}
+
+export interface IncludedContextDependency extends ContextArtifactSummary {
+  layer: ContextLayer;
+  required: boolean;
+  priority: number;
+  includedContent: string;
+  originalEstimate: ContextSizeEstimate;
+  includedEstimate: ContextSizeEstimate;
+  pointer: ContextPointer;
+  sections: ContextSection[];
+}
+
+export interface ContextTruncationDecision {
+  id: string;
+  stage: StageCode;
+  artifactPath: string;
+  sectionTitle?: string;
+  fromLayer: ContextLayer;
+  toLayer: ContextLayer;
+  reason:
+    | "budget_target"
+    | "budget_threshold"
+    | "lower_priority"
+    | "optional_summary"
+    | "old_stage"
+    | "large_section"
+    | "focused_fallback";
+  before: ContextSizeEstimate;
+  after: ContextSizeEstimate;
+  pointer: ContextPointer;
+}
+
+export interface ContextBudgetAudit {
+  status: ContextBudgetStatus;
+  config: ContextBudgetConfig;
+  limits: ContextBudgetLimit;
+  promptEstimate: ContextSizeEstimate;
+  contextEstimate: ContextSizeEstimate;
+  dependencies: IncludedContextDependency[];
+  truncationDecisions: ContextTruncationDecision[];
+  warnings: ContextBudgetWarning[];
+}
+
+export interface BudgetedContextPack extends ContextPack {
+  dependencies: IncludedContextDependency[];
+  budget: ContextBudgetAudit;
+}
+
+export interface ContextBuildOptions {
+  maxLinesPerArtifact?: number;
+  budgetConfig?: Partial<ContextBudgetConfig>;
+  workflowInput?: WorkflowInputMetadata;
+}
+
+export interface PromptRenderBudgetResult {
+  prompt: string;
+  contextPack: BudgetedContextPack;
+  budget: ContextBudgetAudit;
+}
+
+export interface ContextCommandBudgetData {
+  target_max_percent: number;
+  switch_threshold_percent: number;
+  mode: ContextBudgetMode;
+  unit: ContextBudgetUnit;
+  max_context_size: number;
+  target_size: number;
+  switch_threshold_size: number;
+  prompt_estimate: ContextSizeEstimate;
+  context_estimate: ContextSizeEstimate;
+  status: ContextBudgetStatus;
+  warnings: ContextBudgetWarning[];
+  truncation_decisions: ContextTruncationDecision[];
+}
+
+export interface ContextCommandDependencyData {
+  stage: StageCode;
+  required: boolean;
+  layer: ContextLayer;
+  artifact_path?: string;
+  structured_path?: string;
+  original_estimate: ContextSizeEstimate;
+  included_estimate: ContextSizeEstimate;
+  truncated: boolean;
+  pointer?: ContextPointer;
+}
+
+export interface ContextOverBudgetError {
+  code: "context_over_budget";
+  stage: StageCode;
+  status: ContextBudgetStatus;
+  message: string;
+  budget: ContextBudgetAudit;
+}
+
+export interface RunnerContextBudgetMeta {
+  status: ContextBudgetStatus;
+  promptEstimate: ContextSizeEstimate;
+  contextEstimate: ContextSizeEstimate;
+  warningCount: number;
+  truncationCount: number;
 }
 
 export type Lang = "en" | "zh";
@@ -404,6 +621,7 @@ export interface CliGlobalOptions {
 
 export interface FeatureScopedCommandOptions extends CliGlobalOptions {
   featureId?: string;
+  contextMode?: ContextBudgetMode;
 }
 
 export interface InitCommandOptions extends CliGlobalOptions {
@@ -416,6 +634,7 @@ export interface RunCommandOptions extends FeatureScopedCommandOptions {
   maxStages?: number;
   noStopAtGate?: boolean;
   includeRunnerOutput?: boolean;
+  contextMode?: ContextBudgetMode;
 }
 
 export interface RunWorkflowOptions extends RunCommandOptions {
@@ -426,6 +645,7 @@ export interface PromptCommandOptions extends FeatureScopedCommandOptions {
   stage: StageCode;
   input?: string;
   inputFile?: string;
+  contextMode?: ContextBudgetMode;
 }
 
 export interface PromptExportCommandOptions extends CliGlobalOptions {

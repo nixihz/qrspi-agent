@@ -12,6 +12,7 @@ import {
   writeWorkTree,
   writeEngineState,
   writeWorkflowState,
+  writeArtifact,
 } from "../../src/storage/file-repository.js";
 import type { EngineState, SessionConfig, StageCode, WorkflowState } from "../../src/workflow/types.js";
 
@@ -276,17 +277,80 @@ describe("cli main feature scoping", () => {
       command: string;
       data: {
         current_stage: string;
-        context_budget: { target_max_percent: number; switch_threshold_percent: number };
+        dependencies: Array<{ stage: string; layer: string }>;
+        context_budget: {
+          target_max_percent: number;
+          switch_threshold_percent: number;
+          mode: string;
+          status: string;
+          prompt_estimate: { characters: number };
+          truncation_decisions: unknown[];
+          warnings: unknown[];
+        };
       };
     };
 
     expect(result.code).toBe(0);
     expect(payload.command).toBe("context");
     expect(payload.data.current_stage).toBe("R");
-    expect(payload.data.context_budget).toEqual({
+    expect(payload.data.context_budget).toMatchObject({
       target_max_percent: 40,
       switch_threshold_percent: 60,
+      mode: "layered",
+      status: "within_target",
     });
+    expect(payload.data.context_budget.prompt_estimate.characters).toBeGreaterThanOrEqual(0);
+    expect(payload.data.context_budget.truncation_decisions).toEqual([]);
+  });
+
+  it("renders P prompts with budget notes and truncation pointers for large prior artifacts", async () => {
+    const config = await createWorkflow(projectRoot, "prompt-budget", "P");
+    const big = Array.from({ length: 1000 }, (_, i) => `old detail ${i}`).join("\n");
+    await writeArtifact(config, {
+      stage: "Q",
+      title: "Q",
+      content: big,
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+    await writeArtifact(config, {
+      stage: "R",
+      title: "R",
+      content: big,
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+    await writeArtifact(config, {
+      stage: "D",
+      title: "D",
+      content: "## Design Decisions\n- Use budgeted context",
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+    await writeArtifact(config, {
+      stage: "S",
+      title: "S",
+      content: "export interface ContextBudgetConfig {}\nexport function buildBudgetedContextPack() {}",
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "prompt",
+      "render",
+      "P",
+      "--root",
+      projectRoot,
+      "--feature",
+      "prompt-budget",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Context Budget Note");
+    expect(result.stdout).toContain("Stage Q Context Content");
+    expect(result.stdout).not.toContain("old detail 999");
   });
 
   it("prints init as a JSON envelope", async () => {

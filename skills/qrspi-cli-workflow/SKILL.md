@@ -256,10 +256,24 @@ Use:
 
 ```bash
 qrspi context --root . --feature <feature_id>
+qrspi context --root . --feature <feature_id> --json
 qrspi budget
 ```
 
-Good for confirming context loading scope and instruction budget before entering a new stage.
+`qrspi context --json` includes the context budget audit:
+
+- `context_budget.status`: `within_target`, `over_target`, or `over_threshold`
+- `prompt_estimate` / `context_estimate`: estimated size, not exact model tokens
+- `warnings`: over-target, missing structured artifacts, or truncation notices
+- `truncation_decisions`: what was reduced and which artifact pointer remains
+- `dependencies[].layer`: `full`, `focused`, `summary`, or `pointer`
+
+Good for confirming context loading scope and instruction budget before entering a new stage. Keep the distinction clear:
+
+- `qrspi budget` reports stage instruction budget and stage metadata.
+- `qrspi context` reports project artifact context budget.
+
+Use `--context-mode full` on `context`, `prompt render`, or `run` only when debugging or intentionally preserving the old complete-artifact behavior.
 
 ### 10. Switch language
 

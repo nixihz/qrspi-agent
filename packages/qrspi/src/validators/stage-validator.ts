@@ -76,7 +76,7 @@ function validateD(content: string): ValidationResult {
   const lenIssue = checkMinLength(content, 20, "D");
   if (lenIssue) issues.push(lenIssue);
 
-  if (!hasHeading(content, /^#\s+(Design Discussion|设计讨论)\b/i)) {
+  if (!hasHeading(content, /^#\s+(?:Design Discussion\b|设计讨论(?:文档)?)(?:\s|$)/i)) {
     issues.push({
       severity: "error",
       message: "D stage output must be a Design Discussion document",
@@ -84,9 +84,9 @@ function validateD(content: string): ValidationResult {
   }
 
   const requiredSections: Array<[string, RegExp]> = [
-    ["Current State", /^#{2,6}\s+(?:\d+\.\s*)?(Current State|Current System|As-Is|现状|当前状态)\b/i],
-    ["Target State", /^#{2,6}\s+(?:\d+\.\s*)?(Target State|Desired State|To-Be|目标状态|目标)\b/i],
-    ["Design Decisions", /^#{2,6}\s+(?:\d+\.\s*)?(Design Decisions?|Decisions?|设计决策|决策)\b/i],
+    ["Current State", /^#{2,6}\s+(?:\d+\.\s*)?(?:Current State\b|Current System\b|As-Is\b|现状|当前状态)(?:\s|$)/i],
+    ["Target State", /^#{2,6}\s+(?:\d+\.\s*)?(?:Target State\b|Desired State\b|To-Be\b|目标状态|期望最终状态|目标)(?:\s|$)/i],
+    ["Design Decisions", /^#{2,6}\s+(?:\d+\.\s*)?(?:Design Decisions?\b|Decisions?\b|设计决策|设计决策列表|决策)(?:\s|$)/i],
   ];
 
   for (const [name, pattern] of requiredSections) {
@@ -98,31 +98,31 @@ function validateD(content: string): ValidationResult {
     }
   }
 
-  const decisionCount = countMatches(content, /^###\s+(?:Decision|决策)\s+\d+\s*:/gim);
+  const decisionCount = countMatches(content, /^###\s+(?:Decision|决策)\s+\d+\s*[:：]/gim);
   if (decisionCount < 1) {
     issues.push({ severity: "error", message: "Missing design decision entries" });
   }
 
-  const recommendedCount = countMatches(content, /\*\*(?:Recommended|Recommendation|推荐方案|推荐)\*\*\s*:/gi);
+  const recommendedCount = countMatches(content, /\*\*(?:Recommended|Recommendation|推荐方案|推荐)\*\*\s*[:：]/gi);
   if (recommendedCount < 1) {
     issues.push({ severity: "error", message: "Missing recommended option in design decisions" });
   }
 
-  const alternativeCount = countMatches(content, /\*\*(?:Alternative(?:\s+[A-Z])?|备选方案|替代方案)\*\*\s*:/gi);
+  const alternativeCount = countMatches(content, /\*\*(?:Alternative(?:\s+[A-Z])?|备选方案(?:\s*[A-ZＡ-Ｚ])?|替代方案(?:\s*[A-ZＡ-Ｚ])?)\*\*\s*[:：]/gi);
   if (alternativeCount < 1) {
     issues.push({ severity: "warning", message: "Too few alternatives presented" });
   }
 
-  const confirmationCount = countMatches(content, /\*\*(?:Needs? Confirmation|Open Questions?|需要确认|待确认)\*\*\s*:/gi);
+  const confirmationCount = countMatches(content, /\*\*(?:Needs? Confirmation|Open Questions?|需要确认|待确认)\*\*\s*[:：]/gi);
   if (confirmationCount < 1) {
     issues.push({ severity: "warning", message: "Missing confirmation questions in design decisions" });
   }
 
-  if (!hasHeading(content, /^#{2,6}\s+(?:\d+\.\s*)?(Architecture Constraints?|Constraints?|架构约束|约束)\b/i)) {
+  if (!hasHeading(content, /^#{2,6}\s+(?:\d+\.\s*)?(?:Architecture Constraints?\b|Constraints?\b|架构约束|约束)(?:\s|$)/i)) {
     issues.push({ severity: "warning", message: "Missing architecture constraints section" });
   }
 
-  if (!hasHeading(content, /^#{2,6}\s+(?:\d+\.\s*)?(Risks?(?: and Mitigations)?|Mitigations?|风险|风险与缓解)\b/i)) {
+  if (!hasHeading(content, /^#{2,6}\s+(?:\d+\.\s*)?(?:Risks?(?: and Mitigations)?\b|Mitigations?\b|风险|风险与缓解)(?:\s|$)/i)) {
     issues.push({ severity: "warning", message: "Missing risks and mitigations section" });
   }
 
@@ -240,10 +240,10 @@ function validatePR(content: string): ValidationResult {
   if (lenIssue) issues.push(lenIssue);
 
   const requiredSections: Array<[string, RegExp]> = [
-    ["Change Summary", /^#{2,6}\s+(Change Summary|变更摘要)\b/im],
-    ["Test Coverage", /^#{2,6}\s+(Test Coverage|测试覆盖)\b/im],
-    ["Release Criteria", /^#{2,6}\s+(Release Criteria|上线条件)\b/im],
-    ["Review Checklist", /^#{2,6}\s+(Review Checklist|审查清单)\b/im],
+    ["Change Summary", /^#{2,6}\s+(?:Change Summary\b|变更摘要)(?:\s|$)/im],
+    ["Test Coverage", /^#{2,6}\s+(?:Test Coverage\b|测试覆盖)(?:\s|$)/im],
+    ["Release Criteria", /^#{2,6}\s+(?:Release Criteria\b|上线条件)(?:\s|$)/im],
+    ["Review Checklist", /^#{2,6}\s+(?:Review Checklist\b|审查清单)(?:\s|$)/im],
   ];
 
   for (const [name, pattern] of requiredSections) {

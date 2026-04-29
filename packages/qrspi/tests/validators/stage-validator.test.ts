@@ -91,6 +91,33 @@ risks
     expect(result.valid).toBe(true);
   });
 
+  it("validates D stage - accepts Chinese prompt template headings", () => {
+    const content = `
+# 设计讨论文档
+
+## 1. 当前状态
+当前系统说明。
+
+## 2. 期望最终状态
+目标行为说明。
+
+## 3. 设计决策
+### 决策 1：保持上下文预算可观测
+- **推荐方案**：使用确定性的估算和裁剪记录。
+- **备选方案 A**：只输出 warning，不实际裁剪。
+- **需要确认**：40% 是否作为软目标。
+
+## 4. 架构约束
+不得绑定特定 LLM。
+
+## 5. 风险与缓解
+风险是裁剪掉必要上下文；缓解方式是保留 artifact 指针。
+` + makeLines(20);
+    const result = validateStageArtifact("D", content);
+    expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(0);
+  });
+
   it("validates D stage - rejects research report output", () => {
     const content = `
 # Research Report
@@ -362,6 +389,27 @@ None
 - [ ] rollback plan reviewed
 - [ ] metrics updated
 `;
+    const result = validateStageArtifact("PR", content);
+    expect(result.valid).toBe(true);
+    expect(result.issues).toHaveLength(0);
+  });
+
+  it("validates PR stage - accepts Chinese recommended headings", () => {
+    const content = `
+# Pull Request Review
+
+## 变更摘要
+- 增加预算感知上下文。
+
+## 测试覆盖
+- 单元测试通过。
+
+## 上线条件
+- lint/test/build 通过。
+
+## 审查清单
+- [ ] 检查 JSON contract。
+` + makeLines(5);
     const result = validateStageArtifact("PR", content);
     expect(result.valid).toBe(true);
     expect(result.issues).toHaveLength(0);
