@@ -2,25 +2,27 @@
 
 ## 让阶段上下文组装具备预算意识
 
-- **状态：** 候选 backlog。
-- **内容：** 用分层上下文策略替代完整累积式上下文加载，并让现有上下文预算字段真正控制哪些内容会进入 prompt。
+- **状态：** 已完成（2026-04-29，commit `1d3b874`）。
+- **内容：** 已用分层上下文策略替代后续阶段完整累积式上下文加载，并让现有上下文预算字段真正控制哪些内容会进入 prompt。
 - **原因：** 目前 `P` 等后续阶段会收到完整的 `Q/R/D/S` artifact。这能降低遗漏风险，但也容易产生重复内容、膨胀 prompt，并让模型关注旧信息或重复细节，而不是当前阶段的具体执行工作。
-- **建议的上下文策略：**
-  - `P` 阶段：完整加载 `S`，加载 `D` 的决策/约束章节，只包含 `Q/R` 的摘要证据或文件指针。
-  - `W` 阶段：优先加载 `P` 和 `S`；更早阶段只作为摘要或关键约束进入上下文。
-  - `I` 阶段：加载相关的 `W/P` slice 上下文，而不是完整 workflow 历史；早期阶段上下文保留为紧凑约束。
-  - `PR` 阶段：优先加载实现报告和测试证据，再加载 plan/work-tree 摘要用于 review framing。
-- **预算控制行为：**
-  - 将 `ContextPack.utilizationTarget` 作为可执行目标，而不只是 metadata。
-  - runner 执行前估算 prompt 大小，并与配置目标比较。
-  - 按固定顺序进行确定性裁剪：可选摘要、旧阶段完整内容、低优先级证据、较长章节正文。
-  - 如果必需上下文仍超过目标，在 `context.json` 和 run metadata 中输出 warning；如果超过 session-switch threshold，则以 `NEEDS_CONTEXT` 或明确的 context-over-budget 错误停止。
-  - 内容被裁剪时保留 artifact 文件指针，让 agent 可以有意识地请求或查看源文件。
-- **验收标准：**
-  - `qrspi context --json` 输出估算 prompt 大小、目标预算、裁剪决策和超预算 warning。
-  - 当前序 artifact 很大时，`qrspi prompt render P` 不再盲目嵌入完整 `Q/R/D/S` artifact。
-  - 测试覆盖阶段级依赖优先级、确定性裁剪和超预算行为。
-  - 文档解释 instruction budget 和 context budget 的区别。
+- **完成范围：**
+  - 已新增 `layered` / `full` context mode，默认使用 layered，保留 `--context-mode full` 兼容旧完整 artifact 行为。
+  - 已为 `P/W/I/PR` 定义阶段 context profile，支持 `full` / `focused` / `summary` / `pointer` 分层。
+  - 已新增 artifact source、focused extraction、分层渲染和确定性裁剪逻辑；markdown artifact 仍为权威来源，structured artifact 作为优化输入。
+  - 已让 `qrspi context`、`qrspi prompt render`、`qrspi run` 共用 budgeted context pack。
+  - 已在 runner 前估算 prompt/context 大小；超过 target 继续运行并记录 warning，超过 session-switch threshold 时在 runner 调用前以 `context_over_budget` 停止。
+  - 已在 `context.json`、`runner_meta.json` 和 `qrspi context --json` 中输出预算状态、估算值、warning、裁剪决策和 artifact pointer。
+  - 已修复 D/PR validator 对中文标题的支持，避免中文 `设计讨论文档`、`变更摘要` 等标题被 `\b` 单词边界误拦截。
+  - 已更新 README、中文 README、CLI JSON 文档和 `qrspi-cli-workflow` skill，解释 instruction budget 与 context budget 的区别。
+- **验收结果：**
+  - `qrspi context --json` 已输出估算 prompt 大小、目标预算、裁剪决策和超预算 warning。
+  - 当前序 artifact 很大时，`qrspi prompt render P` 已不再盲目嵌入完整 `Q/R/D/S` artifact，并会保留裁剪后的 artifact pointer。
+  - 测试已覆盖阶段级依赖优先级、structured 优先与 markdown fallback、确定性裁剪、over-target warning、over-threshold pre-run stop、CLI JSON contract 和 prompt render budget note。
+  - 文档已区分 instruction budget 和 context budget，并说明 layered/full 模式、target warning、threshold stop、审计字段。
+- **验证：**
+  - `npm run lint --workspace=packages/qrspi`
+  - `npm test --workspace=packages/qrspi`
+  - `npm run build --workspace=packages/qrspi`
 
 ## 为 QRSPI workflow 增加文档输入入口
 
