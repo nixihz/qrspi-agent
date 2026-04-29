@@ -24,19 +24,23 @@
 
 ## 为 QRSPI workflow 增加文档输入入口
 
-- **状态：** 建议下一步实现。
-- **内容：** 让用户可以从文档文件启动或渲染 QRSPI workflow，而不是只能传内联 `--input` 字符串。
+- **状态：** 已完成（2026-04-29，commit `4bc3616`）。
+- **内容：** 已支持用户从文档文件启动或渲染 QRSPI workflow，而不是只能传内联 `--input` 字符串。
 - **原因：** 真实需求经常来自 Markdown、PDF、DOCX、飞书导出或粘贴的产品文档。当前 CLI 只暴露 `--input <text>`，长文档通过 shell quoting 传入既别扭又脆弱。
-- **建议范围：**
-  - 给 `qrspi run` 和 `qrspi prompt render` 增加 `--input-file <path>`。
-  - 直接支持 `.md` 和 `.txt`。
-  - 文档中说明推荐桥接路径：PDF/DOCX/PPTX/XLSX/URL 先通过现有 `tomd` skill 转换，再把生成的 Markdown 文件传给 QRSPI。
-  - 在 run context 或 artifact note 中保留源文件路径 metadata，让 reviewer 知道 workflow 是由哪个文档启动的。
-- **验收标准：**
-  - `qrspi run --root . --feature <id> --input-file docs/requirement.md --json` 无需 shell command substitution 即可工作。
+- **完成范围：**
+  - 已给 `qrspi run` 和 `qrspi prompt render` 增加 `--input-file <path>`。
+  - 已直接支持 `.md` 和 `.txt`，按 UTF-8 文本读取。
+  - 已在文档中说明推荐桥接路径：PDF/DOCX/PPTX/XLSX/URL 先通过现有 `tomd` skill 转换，再把生成的 Markdown 文件传给 QRSPI。
+  - 已在 prompt、run `context.json` 和 `run --json` 的 `workflow_input` metadata 中保留源文件路径，让 reviewer 知道 workflow 是由哪个文档启动的。
+- **验收结果：**
+  - `qrspi run --root . --feature <id> --input-file docs/requirement.md --json` 可工作，无需 shell command substitution。
   - `qrspi prompt render Q --root . --feature <id> --input-file docs/requirement.md` 包含文档内容和源路径。
-  - 文件不存在、传入目录、文件不可读时，`--json` 模式输出清晰 JSON 错误。
-  - 文档和 skill 说明非 Markdown 文档的 `tomd -> qrspi --input-file` 路径。
+  - 文件不存在、传入目录、文件不可读、不支持扩展名时，`--json` 模式输出清晰 JSON 错误。
+  - README、中文 README、CLI JSON 文档和 skill 已说明非 Markdown 文档的 `tomd -> qrspi --input-file` 路径。
+- **验证：**
+  - `npm run lint --workspace=packages/qrspi`
+  - `npm test --workspace=packages/qrspi`
+  - `npm run build --workspace=packages/qrspi`
 
 ## 实现 slice 级自动执行
 
