@@ -40,6 +40,8 @@ import type {
   ValidationSummary,
   WorkflowState,
   WorkflowStatusSummary,
+  WorkflowInputJson,
+  WorkflowInputMetadata,
 } from "../workflow/types.js";
 import { getNextStage, getStageDefinition, getStageDescription, getStageOrder, isGateStage } from "../workflow/stage-schema.js";
 
@@ -79,6 +81,18 @@ function relativizeGateReviewRecord(config: SessionConfig, record: GateReviewRec
       : undefined,
     review_path: record.review_path ? toProjectRelative(config, record.review_path) : undefined,
     source_file: record.source_file ? toProjectRelative(config, record.source_file) : undefined,
+  };
+}
+
+export function toWorkflowInputJson(
+  input: WorkflowInputMetadata | undefined,
+  config: SessionConfig,
+): WorkflowInputJson | undefined {
+  if (!input || input.input_source === "none") return undefined;
+  return {
+    input_source: input.input_source,
+    source_file: input.source_file ? toProjectRelative(config, input.source_file) : undefined,
+    file_kind: input.file_kind,
   };
 }
 
@@ -639,6 +653,7 @@ export async function buildRunJson(
   engineState: EngineState,
   results: RunSingleStageResult[],
   includeRunnerOutput = false,
+  workflowInput?: WorkflowInputMetadata,
 ): Promise<CliResponseEnvelope<RunCommandData>> {
   const executedStages = await Promise.all(
     results.map((result) => buildRunSummaryItem(config, result, includeRunnerOutput)),
@@ -649,6 +664,7 @@ export async function buildRunJson(
     executed_stages: executedStages,
     stopped_at_gate: workflow.waiting_for_gate ? workflow.current_gate : undefined,
     next_action: nextAction(state, engineState),
+    workflow_input: toWorkflowInputJson(workflowInput, config),
   };
 
   const ok = results.every(

@@ -407,6 +407,28 @@ describe("cli main feature scoping", () => {
     expect(contextResult.stdout).toContain("Current Stage: R");
   });
 
+  it("renders prompt input from a markdown file with source provenance", async () => {
+    await createWorkflow(projectRoot, "file-prompt", "Q");
+    writeFileSync(join(projectRoot, "requirements.md"), "# Requirement\n\nAdd login");
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "prompt",
+      "render",
+      "Q",
+      "--root",
+      projectRoot,
+      "--feature",
+      "file-prompt",
+      "--input-file",
+      "requirements.md",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("## User Input\nInput source: requirements.md\n\n# Requirement\n\nAdd login");
+  });
+
   it("exports all base prompt templates without a workflow", async () => {
     const result = await runCli([
       "node",
@@ -544,6 +566,156 @@ describe("cli main feature scoping", () => {
     expect(payload.data.executed_stages[0]?.artifact.path).toContain(".qrspi/json-run/artifacts/Q_");
     expect(payload.data.executed_stages[0]?.runner_output).toBeUndefined();
     expect(result.stdout).not.toContain("Technical Questions");
+  });
+
+  it("prints run JSON with workflow input metadata from a text file", async () => {
+    await createWorkflow(projectRoot, "json-run-file", "Q");
+    writeFileSync(join(projectRoot, "requirements.txt"), "Add file-backed requirements");
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "run",
+      "--root",
+      projectRoot,
+      "--feature",
+      "json-run-file",
+      "--runner",
+      "mock",
+      "--max-stages",
+      "1",
+      "--json",
+      "--input-file",
+      "requirements.txt",
+    ]);
+    const payload = JSON.parse(result.stdout) as {
+      ok: boolean;
+      data: {
+        workflow_input?: { input_source: string; source_file: string; file_kind: string };
+      };
+    };
+    const runsDir = join(projectRoot, ".qrspi", "json-run-file", "runs");
+    const [runDirName] = readdirSync(runsDir).sort();
+    const runContext = JSON.parse(
+      readFileSync(join(runsDir, runDirName!, "context.json"), "utf-8"),
+    ) as { workflow_input?: { input_source: string; source_file: string; file_kind: string } };
+    const prompt = readFileSync(join(runsDir, runDirName!, "prompt.md"), "utf-8");
+
+    expect(result.code).toBe(0);
+    expect(payload.ok).toBe(true);
+    expect(payload.data.workflow_input).toEqual({
+      input_source: "file",
+      source_file: "requirements.txt",
+      file_kind: "text",
+    });
+    expect(runContext.workflow_input).toEqual({
+      input_source: "file",
+      source_file: "requirements.txt",
+      file_kind: "text",
+    });
+    expect(prompt).toContain("Input source: requirements.txt");
+    expect(prompt).toContain("Add file-backed requirements");
+  });
+
+  it("returns JSON error when input options conflict", async () => {
+    await createWorkflow(projectRoot, "input-conflict", "Q");
+    writeFileSync(join(projectRoot, "requirements.md"), "Add login");
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "run",
+      "--root",
+      projectRoot,
+      "--feature",
+      "input-conflict",
+      "--runner",
+      "mock",
+      "--json",
+      "--input",
+      "inline",
+      "--input-file",
+      "requirements.md",
+    ]);
+    const payload = JSON.parse(result.stdout) as { ok: boolean; error: { code: string } };
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe("INPUT_CONFLICT");
+  });
+
+  it("returns JSON error for unsupported input file extensions", async () => {
+    await createWorkflow(projectRoot, "bad-extension", "Q");
+    writeFileSync(join(projectRoot, "requirements.pdf"), "%PDF");
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "prompt",
+      "render",
+      "Q",
+      "--root",
+      projectRoot,
+      "--feature",
+      "bad-extension",
+      "--json",
+      "--input-file",
+      "requirements.pdf",
+    ]);
+    const payload = JSON.parse(result.stdout) as { ok: boolean; error: { code: string } };
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe("INPUT_FILE_UNSUPPORTED_TYPE");
+  });
+
+  it("returns JSON error for missing input files", async () => {
+    await createWorkflow(projectRoot, "missing-file", "Q");
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "run",
+      "--root",
+      projectRoot,
+      "--feature",
+      "missing-file",
+      "--runner",
+      "mock",
+      "--json",
+      "--input-file",
+      "missing.md",
+    ]);
+    const payload = JSON.parse(result.stdout) as { ok: boolean; error: { code: string } };
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toBe("");
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe("INPUT_FILE_NOT_FOUND");
+  });
+
+  it("returns text error for directory input files", async () => {
+    await createWorkflow(projectRoot, "directory-file", "Q");
+    mkdirSync(join(projectRoot, "notes.md"));
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "prompt",
+      "render",
+      "Q",
+      "--root",
+      projectRoot,
+      "--feature",
+      "directory-file",
+      "--input-file",
+      "notes.md",
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Input file points to a directory: notes.md");
   });
 
   it("prints runner output in run JSON only when requested", async () => {

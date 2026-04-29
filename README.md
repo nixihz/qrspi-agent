@@ -187,6 +187,9 @@ qrspi prompt render Q --feature user-authentication
 # Render full prompt (ready to use with Claude Code / Codex CLI)
 qrspi prompt render Q --feature user-authentication --input "Add user authentication with email+password and OAuth"
 
+# Or read the requirement from a UTF-8 .md or .txt file
+qrspi prompt render Q --feature user-authentication --input-file requirements.md
+
 # Export base prompt templates for review, without workflow context or user input
 qrspi prompt export --out qrspi-prompts.md
 qrspi prompt export Q --out Q_prompt.md
@@ -213,6 +216,9 @@ If you have Claude Code or Codex CLI configured, you can let the workflow auto-a
 # Default model: kimi-for-coding
 qrspi run --input "Add user authentication with email+password and OAuth"
 
+# Read requirements from a UTF-8 .md or .txt file
+qrspi run --input-file requirements.md
+
 # Use Codex CLI, starting from current stage
 # Default model: gpt-5.4
 qrspi run --runner codex --input "Add user authentication with email+password and OAuth"
@@ -227,6 +233,10 @@ qrspi run --input "Add user authentication" --model kimi-for-coding
 
 # Use mock runner for local state-machine validation
 qrspi run --runner mock --input "Add user authentication"
+
+# For PDF, DOCX, HTML, or other rich documents, convert to Markdown first
+# with a tool such as tomd, then pass the generated .md file:
+qrspi run --input-file requirements.md
 
 # Continue after D / S / PR stage confirmation
 qrspi approve

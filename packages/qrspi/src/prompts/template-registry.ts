@@ -465,7 +465,7 @@ Never silently produce work you're unsure about.
 }
 
 function renderTemplate(input: PromptTemplateInput): string {
-  const { stage, userInput, context, lang = "en" } = input;
+  const { stage, userInput, workflowInput, context, lang = "en" } = input;
   const instructions = baseInstructions(stage, lang);
   const contextSection = formatContextForPrompt(context, lang);
 
@@ -476,6 +476,7 @@ function renderTemplate(input: PromptTemplateInput): string {
       roleDesc: "Operate only the current QRSPI stage. Use the provided context as evidence, follow the stage instructions, and do not produce work for later stages.",
       instructions: "Instructions",
       userInput: "User Input",
+      inputSource: "Input source",
       footer: "Begin execution. Strictly follow the output format. Do not add content outside the format.",
     },
     zh: {
@@ -484,6 +485,7 @@ function renderTemplate(input: PromptTemplateInput): string {
       roleDesc: "只执行当前 QRSPI 阶段。以提供的上下文为依据，遵循本阶段指令，不产出后续阶段的工作。",
       instructions: "指令",
       userInput: "用户输入",
+      inputSource: "输入来源",
       footer: "开始执行。严格按输出格式产出，不要添加格式外的内容。",
     },
   };
@@ -506,12 +508,23 @@ function renderTemplate(input: PromptTemplateInput): string {
   }
 
   if (userInput) {
-    parts.push(`## ${t.userInput}`, userInput, "");
+    const userInputParts = workflowInput?.input_source === "file" && workflowInput.source_file
+      ? [`${t.inputSource}: ${workflowInput.source_file}`, "", userInput]
+      : [userInput];
+    parts.push(`## ${t.userInput}`, ...userInputParts, "");
   }
 
   parts.push("---", t.footer);
 
   return parts.join("\n");
+}
+
+export function formatWorkflowInputSourceForPrompt(
+  input: PromptTemplateInput["workflowInput"],
+  lang: Lang = "en",
+): string {
+  if (input?.input_source !== "file" || !input.source_file) return "";
+  return `${lang === "zh" ? "输入来源" : "Input source"}: ${input.source_file}`;
 }
 
 export function createPromptRegistry(): PromptRegistry {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { SessionConfig, Runner, RunnerExecInput } from "../../src/workflow/types.js";
@@ -77,6 +77,42 @@ describe("engine", () => {
     expect(result.engineState.history).toHaveLength(1);
     expect(result.engineState.history[0].success).toBe(true);
     expect(result.artifact).toBeDefined();
+  });
+
+  it("runSingleStage writes workflow input provenance to prompt and context", async () => {
+    await initWorkflow(config);
+    const runner = new TestRunner("### Q1: What?\n### Q2: How?\n### Q3: Why?\n### Q4: When?\n### Q5: Where?\n\n".repeat(3));
+    const { workflowState, engineState } = await initWorkflow(config);
+
+    const result = await runSingleStage(
+      config,
+      workflowState,
+      engineState,
+      runner,
+      "Add login from a file",
+      "en",
+      {},
+      {
+        input_source: "file",
+        source_file: "requirements.md",
+        file_kind: "markdown",
+      },
+    );
+    const runsDir = join(config.projectRoot, ".qrspi", config.featureId, "runs");
+    const [runDirName] = readdirSync(runsDir).sort();
+    const prompt = readFileSync(join(runsDir, runDirName!, "prompt.md"), "utf-8");
+    const context = JSON.parse(
+      readFileSync(join(runsDir, runDirName!, "context.json"), "utf-8"),
+    ) as { workflow_input?: { input_source: string; source_file: string; file_kind: string } };
+
+    expect(result.validation.valid).toBe(true);
+    expect(prompt).toContain("Input source: requirements.md");
+    expect(prompt).toContain("Add login from a file");
+    expect(context.workflow_input).toEqual({
+      input_source: "file",
+      source_file: "requirements.md",
+      file_kind: "markdown",
+    });
   });
 
   it("runSingleStage fails validation", async () => {

@@ -153,6 +153,9 @@ qrspi prompt render Q --feature user-authentication
 # 渲染完整 prompt（可以直接给 Claude Code / Codex CLI 使用）
 qrspi prompt render Q --feature user-authentication --input "添加用户认证功能，支持邮箱+密码和 OAuth"
 
+# 也可以从 UTF-8 .md 或 .txt 文件读取需求
+qrspi prompt render Q --feature user-authentication --input-file requirements.md
+
 # 导出基础 Prompt 模板供审阅，不包含当前 workflow 的上下文或用户输入
 qrspi prompt export --lang zh --out qrspi-prompts.md
 qrspi prompt export Q --lang zh --out Q_prompt.md
@@ -179,6 +182,9 @@ qrspi advance
 # 默认模型: kimi-for-coding
 qrspi run --input "添加用户认证功能，支持邮箱+密码和 OAuth"
 
+# 从 UTF-8 .md 或 .txt 文件读取需求
+qrspi run --input-file requirements.md
+
 # 使用 Codex CLI，从当前阶段开始执行
 # 默认模型: gpt-5.4
 qrspi run --runner codex --input "添加用户认证功能，支持邮箱+密码和 OAuth"
@@ -193,6 +199,10 @@ qrspi run --input "添加用户认证功能" --model kimi-for-coding
 
 # 本地验证状态机时可使用 mock runner
 qrspi run --runner mock --input "添加用户认证功能"
+
+# PDF、DOCX、HTML 等富文本/二进制文档请先用 tomd 等工具转成 Markdown，
+# 再把生成的 .md 文件传给 qrspi：
+qrspi run --input-file requirements.md
 
 # D / S / PR 阶段确认后继续
 qrspi approve

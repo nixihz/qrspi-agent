@@ -14,6 +14,17 @@ export type GateDecision = "approved" | "rejected";
 
 export type ReviewInputSource = "inline" | "file" | "none";
 
+export type WorkflowInputSource = "inline" | "file" | "none";
+
+export type WorkflowInputFileKind = "markdown" | "text";
+
+export type WorkflowInputErrorCode =
+  | "INPUT_CONFLICT"
+  | "INPUT_FILE_NOT_FOUND"
+  | "INPUT_FILE_IS_DIRECTORY"
+  | "INPUT_FILE_UNSUPPORTED_TYPE"
+  | "INPUT_FILE_UNREADABLE";
+
 export type ModelTier = "low" | "standard" | "powerful";
 
 export type SessionStatus =
@@ -188,6 +199,7 @@ export interface RunCommandData {
   executed_stages: StageRunSummary[];
   stopped_at_gate?: GateStageCode;
   next_action: NextActionSummary;
+  workflow_input?: WorkflowInputJson;
 }
 
 export interface GateDecisionCommandData {
@@ -280,14 +292,43 @@ export interface ContextPack {
   dependencies: ContextArtifactSummary[];
   maxLinesPerArtifact: number;
   utilizationTarget: number;
+  workflow_input?: WorkflowInputMetadata;
 }
 
 export type Lang = "en" | "zh";
+
+export interface WorkflowInputMetadata {
+  input_source: WorkflowInputSource;
+  source_file?: string;
+  file_kind?: WorkflowInputFileKind;
+}
+
+export interface ResolvedWorkflowInput extends WorkflowInputMetadata {
+  content?: string;
+  resolved_path?: string;
+}
+
+export interface WorkflowInputRequest {
+  inline?: string;
+  file?: string;
+  projectRoot: string;
+}
+
+export interface WorkflowInputJson extends WorkflowInputMetadata {
+  source_file?: string;
+}
+
+export interface WorkflowInputFileValidation {
+  path: string;
+  resolved_path: string;
+  file_kind: WorkflowInputFileKind;
+}
 
 export interface PromptTemplateInput {
   featureId: string;
   stage: StageCode;
   userInput?: string;
+  workflowInput?: WorkflowInputMetadata;
   context: ContextPack;
   lang?: Lang;
 }
@@ -371,14 +412,20 @@ export interface InitCommandOptions extends CliGlobalOptions {
 
 export interface RunCommandOptions extends FeatureScopedCommandOptions {
   input?: string;
+  inputFile?: string;
   maxStages?: number;
   noStopAtGate?: boolean;
   includeRunnerOutput?: boolean;
 }
 
+export interface RunWorkflowOptions extends RunCommandOptions {
+  workflowInput?: ResolvedWorkflowInput;
+}
+
 export interface PromptCommandOptions extends FeatureScopedCommandOptions {
   stage: StageCode;
   input?: string;
+  inputFile?: string;
 }
 
 export interface PromptExportCommandOptions extends CliGlobalOptions {

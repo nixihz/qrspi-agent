@@ -13,8 +13,9 @@ import type {
   Runner,
   RunnerOptions,
   StageCode,
-  RunCommandOptions,
+  RunWorkflowOptions,
   Lang,
+  WorkflowInputMetadata,
 } from "../workflow/types.js";
 import {
   getNextStage,
@@ -60,6 +61,7 @@ export async function runSingleStage(
   userInput?: string,
   lang: Lang = "en",
   runnerOptions: RunnerOptions = {},
+  workflowInput?: WorkflowInputMetadata,
 ): Promise<RunSingleStageResult> {
   const stage = workflowState.currentStage;
   const attempt = (engineState.stage_attempts[stage] ?? 0) + 1;
@@ -74,18 +76,22 @@ export async function runSingleStage(
 
   try {
     const contextPack = await buildContextPack(stage, config);
+    const runContextPack = workflowInput && workflowInput.input_source !== "none"
+      ? { ...contextPack, workflow_input: workflowInput }
+      : contextPack;
 
     const registry = createPromptRegistry();
     const prompt = renderStagePrompt(registry, {
       featureId: config.featureId,
       stage,
       userInput,
-      context: contextPack,
+      workflowInput,
+      context: runContextPack,
       lang,
     });
 
     await writeRunFile(runDir, "prompt.md", prompt);
-    await writeRunFile(runDir, "context.json", contextPack);
+    await writeRunFile(runDir, "context.json", runContextPack);
     await writeRunFile(runDir, "live_stdout.txt", "");
     await writeRunFile(runDir, "live_stderr.txt", "");
 
@@ -276,7 +282,7 @@ export async function runSingleStage(
 export async function runWorkflow(
   config: SessionConfig,
   runner: Runner,
-  options: RunCommandOptions,
+  options: RunWorkflowOptions,
 ): Promise<{ workflowState: WorkflowState; engineState: EngineState; results: RunSingleStageResult[] }> {
   let workflowState =
     (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
@@ -323,6 +329,11 @@ export async function runWorkflow(
       options.input,
       options.lang,
       runnerOptions,
+      options.workflowInput ? {
+        input_source: options.workflowInput.input_source,
+        source_file: options.workflowInput.source_file,
+        file_kind: options.workflowInput.file_kind,
+      } : undefined,
     );
 
     results.push(result);

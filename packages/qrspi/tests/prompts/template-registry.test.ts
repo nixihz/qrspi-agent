@@ -72,6 +72,7 @@ describe("prompt template registry", () => {
       lang: "en",
     });
     expect(prompt).toContain("Add login feature");
+    expect(prompt).not.toContain("Input source:");
   });
 
   it("includes Chinese user input label when lang=zh", () => {
@@ -84,6 +85,42 @@ describe("prompt template registry", () => {
       lang: "zh",
     });
     expect(prompt).toContain("用户输入");
+  });
+
+  it("includes file input source before English user input body", () => {
+    const registry = createPromptRegistry();
+    const prompt = renderStagePrompt(registry, {
+      featureId: "test",
+      stage: "Q",
+      context: makeContext("Q"),
+      userInput: "Add login feature",
+      workflowInput: {
+        input_source: "file",
+        source_file: "requirements.md",
+        file_kind: "markdown",
+      },
+      lang: "en",
+    });
+
+    expect(prompt).toContain("## User Input\nInput source: requirements.md\n\nAdd login feature");
+  });
+
+  it("includes localized file input source before Chinese user input body", () => {
+    const registry = createPromptRegistry();
+    const prompt = renderStagePrompt(registry, {
+      featureId: "test",
+      stage: "Q",
+      context: makeContext("Q"),
+      userInput: "添加登录功能",
+      workflowInput: {
+        input_source: "file",
+        source_file: "requirements.txt",
+        file_kind: "text",
+      },
+      lang: "zh",
+    });
+
+    expect(prompt).toContain("## 用户输入\n输入来源: requirements.txt\n\n添加登录功能");
   });
 
   it("does not duplicate the shared English role or instructions heading", () => {

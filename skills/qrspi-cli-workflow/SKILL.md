@@ -111,6 +111,7 @@ Use:
 
 ```bash
 qrspi prompt render Q --root . --input "requirement description"
+qrspi prompt render Q --root . --input-file requirements.md
 qrspi prompt render D --root .
 
 # If multiple workflows exist
@@ -120,6 +121,7 @@ qrspi prompt render D --root . --feature <feature_id>
 Rules:
 
 - Pass `--input` when there is a raw user requirement
+- Prefer `--input-file` when the requirement is already available as a UTF-8 `.md` or `.txt` file
 - `prompt render` is for workflow-aware prompts; use `prompt export` for base templates
 - Stage codes must be one of `Q/R/D/S/P/W/I/PR`
 
@@ -208,9 +210,11 @@ Use:
 
 ```bash
 qrspi run --root . --input "requirement description"
+qrspi run --root . --input-file requirements.md
 
 # If multiple workflows exist
 qrspi run --root . --feature <feature_id> --input "requirement description"
+qrspi run --root . --feature <feature_id> --input-file requirements.md
 ```
 
 If the user wants to specify a runner:
@@ -225,6 +229,7 @@ Additional rules:
 - Do NOT enable `--no-stop-at-gate` by default
 - Unless the user requests it, do NOT blindly run across many stages
 - For controlled execution, prefer using `--max-stages`
+- `--input-file` supports `.md` and `.txt`; convert PDF, DOCX, HTML, and other non-text documents to Markdown first, then pass the generated file
 - Long-running real runner tasks do not have a default timeout
 - To inspect live runner output while a stage is running, read:
   - `.qrspi/<feature_id>/runs/<STAGE>_<timestamp>_attempt<N>/live_stdout.txt`

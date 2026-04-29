@@ -121,20 +121,41 @@ Returns the current context strategy and dependency artifact summaries.
 qrspi run --root . --feature <id> --runner mock --max-stages 1 --json
 ```
 
-Returns final workflow state plus one item per executed stage:
+Returns final workflow state plus one item per executed stage under
+`data.executed_stages[]`.
 
-- `results[].stage`
-- `results[].success`
-- `results[].status`
-- `results[].validation`
-- `results[].artifact`
-- `results[].run_dir`
+- `data.workflow`
+- `data.executed_stages[].stage`
+- `data.executed_stages[].validation`
+- `data.executed_stages[].artifact`
+- `data.executed_stages[].structured_artifact`
+- `data.stopped_at_gate`
+- `data.next_action`
+
+When workflow input comes from a file, `run --json` also includes
+`data.workflow_input`:
+
+```json
+{
+  "input_source": "file",
+  "source_file": "requirements.md",
+  "file_kind": "markdown"
+}
+```
+
+`source_file` is project-relative when the file is inside `--root`.
 
 Use this only when runner output is explicitly needed:
 
 ```bash
 qrspi run --root . --feature <id> --json --include-runner-output
 ```
+
+`qrspi run` and `qrspi prompt render` support `--input-file <path>` for UTF-8
+`.md` and `.txt` files. File-input validation failures return the normal
+`ok: false` JSON envelope in JSON mode with codes such as `INPUT_CONFLICT`,
+`INPUT_FILE_NOT_FOUND`, `INPUT_FILE_IS_DIRECTORY`,
+`INPUT_FILE_UNSUPPORTED_TYPE`, and `INPUT_FILE_UNREADABLE`.
 
 ### `approve` / `reject`
 

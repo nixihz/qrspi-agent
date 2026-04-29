@@ -70,6 +70,11 @@ import {
   writeCliResponse,
 } from "./json-output.js";
 import {
+  createWorkflowInputMetadata,
+  resolveWorkflowInput,
+  WorkflowInputError,
+} from "./workflow-input.js";
+import {
   getStageOrder,
   getStageName,
   getStageDescription,
@@ -188,6 +193,29 @@ function printCommandError(
         message: error.message,
         feature: error.feature,
         details: error.features ? { features: error.features } : undefined,
+      }),
+      "json",
+    );
+    return;
+  }
+
+  printErr(error.message);
+}
+
+function printWorkflowInputError(
+  command: string,
+  opts: CliGlobalOptions,
+  featureId: string | undefined,
+  error: WorkflowInputError,
+): void {
+  if (isJsonOutputRequested(opts)) {
+    writeCliResponse(
+      buildErrorJson({
+        command,
+        code: error.code,
+        message: error.message,
+        feature: featureId,
+        details: error.details,
       }),
       "json",
     );
@@ -351,12 +379,28 @@ export async function handlePromptCommand(opts: PromptCommandOptions): Promise<n
     return 1;
   }
 
+  const workflowInput = await resolveWorkflowInput({
+    inline: opts.input,
+    file: opts.inputFile,
+    projectRoot: config.projectRoot,
+  }).catch((error: unknown) => {
+    if (error instanceof WorkflowInputError) {
+      printWorkflowInputError("prompt", opts, config.featureId, error);
+      return null;
+    }
+    throw error;
+  });
+  if (!workflowInput) {
+    return 1;
+  }
+  const workflowInputMetadata = createWorkflowInputMetadata(workflowInput);
   const registry = createPromptRegistry();
   const context = await buildContextPack(opts.stage, config);
   const prompt = renderStagePrompt(registry, {
     featureId: config.featureId,
     stage: opts.stage,
-    userInput: opts.input,
+    userInput: workflowInput.content,
+    workflowInput: workflowInputMetadata,
     context,
     lang: opts.lang,
   });
@@ -417,10 +461,29 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
     return 1;
   }
 
+  const workflowInput = await resolveWorkflowInput({
+    inline: opts.input,
+    file: opts.inputFile,
+    projectRoot: config.projectRoot,
+  }).catch((error: unknown) => {
+    if (error instanceof WorkflowInputError) {
+      printWorkflowInputError("run", opts, config.featureId, error);
+      return null;
+    }
+    throw error;
+  });
+  if (!workflowInput) {
+    return 1;
+  }
+
   const runnerName = resolveRunnerName(opts.runner);
   const runner = buildRunner(runnerName, { model: opts.model });
 
-  const { workflowState, engineState, results } = await runWorkflow(config, runner, opts);
+  const { workflowState, engineState, results } = await runWorkflow(config, runner, {
+    ...opts,
+    input: workflowInput.content,
+    workflowInput,
+  });
   if (isJsonOutputRequested(opts)) {
     const payload = await buildRunJson(
       config,
@@ -428,6 +491,7 @@ export async function handleRunCommand(opts: RunCommandOptions): Promise<number>
       engineState,
       results,
       opts.includeRunnerOutput,
+      createWorkflowInputMetadata(workflowInput),
     );
     writeCliResponse(payload, "json");
     return payload.ok ? 0 : 1;
@@ -823,6 +887,7 @@ export async function main(argv?: string[]): Promise<number> {
       .command("render <stage>")
       .description("Render a workflow-aware stage prompt")
       .option("--input <text>", "User input")
+      .option("--input-file <path>", "Read user input from a .md or .txt file")
   ).action(async (stage: string, opts: PromptCommandOptions) => {
     const code = await handlePromptCommand({ ...opts, stage: stage as StageCode });
     process.exitCode = code;
@@ -844,6 +909,7 @@ export async function main(argv?: string[]): Promise<number> {
       .command("run")
       .description("Run the workflow")
       .option("--input <text>", "User requirement input")
+      .option("--input-file <path>", "Read user requirement input from a .md or .txt file")
       .option("--max-stages <n>", "Maximum stages to execute", parseInt)
       .option("--no-stop-at-gate", "Do not stop at gate stages")
       .option("--include-runner-output", "Include runner stdout/stderr in JSON output", false)
