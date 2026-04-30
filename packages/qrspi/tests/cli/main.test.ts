@@ -7,8 +7,10 @@ import { initWorkflow } from "../../src/engine/engine.js";
 import { main } from "../../src/cli/main.js";
 import {
   readWorkTree,
+  readSliceExecutionState,
   readEngineState,
   readWorkflowState,
+  writeSliceExecutionState,
   writeWorkTree,
   writeEngineState,
   writeWorkflowState,
@@ -165,6 +167,58 @@ describe("cli main feature scoping", () => {
     expect(statusResult.stdout).toContain("Feature: beta");
     expect(stageResult.code).toBe(0);
     expect(stageResult.stdout).toContain("Output Directory: .qrspi/beta");
+  });
+
+  it("embeds slice execution summary in text status output", async () => {
+    const config = await createWorkflow(projectRoot, "slice-summary", "I", "running");
+    await writeSliceExecutionState(config, {
+      featureId: "slice-summary",
+      current_slice_order: 2,
+      updatedAt: "2026-04-29T10:00:00.000Z",
+      slices: [
+        {
+          slice_name: "core-state",
+          slice_order: 1,
+          status: "completed",
+          attempts: 1,
+          model_tier: "low",
+          started_at: "2026-04-29T09:00:00.000Z",
+        },
+        {
+          slice_name: "status-surface",
+          slice_order: 2,
+          status: "running",
+          attempts: 2,
+          model_tier: "standard",
+          started_at: "2026-04-29T09:05:00.000Z",
+        },
+        {
+          slice_name: "retry-path",
+          slice_order: 3,
+          status: "failed",
+          attempts: 1,
+          model_tier: "powerful",
+          started_at: "2026-04-29T09:08:00.000Z",
+        },
+      ],
+    });
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "status",
+      "--root",
+      projectRoot,
+      "--feature",
+      "slice-summary",
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("QRSPI Workflow Status");
+    expect(result.stdout).toContain("Slice Summary (current: 2)");
+    expect(result.stdout).toContain("✓ [1] core-state | status=completed | start=2026-04-29T09:00:00.000Z");
+    expect(result.stdout).toContain(">>> [2] status-surface | status=running | start=2026-04-29T09:05:00.000Z");
+    expect(result.stdout).toContain("! [3] retry-path | status=failed | start=2026-04-29T09:08:00.000Z");
   });
 
   it("prints status as a JSON envelope", async () => {
@@ -1044,5 +1098,292 @@ describe("cli main feature scoping", () => {
 
     expect(listResult.code).toBe(0);
     expect(listResult.stdout).toContain("[2] core-flow: core path");
+  });
+
+  it("prints slice status with execution metadata and JSON envelope", async () => {
+    const config = await createWorkflow(projectRoot, "slice-status", "I", "running");
+    await writeSliceExecutionState(config, {
+      featureId: "slice-status",
+      current_slice_order: 2,
+      updatedAt: "2026-04-29T10:00:00.000Z",
+      slices: [
+        {
+          slice_name: "core-state",
+          slice_order: 1,
+          status: "completed",
+          attempts: 1,
+          model_tier: "low",
+          started_at: "2026-04-29T09:00:00.000Z",
+          finished_at: "2026-04-29T09:05:00.000Z",
+        },
+        {
+          slice_name: "status-surface",
+          slice_order: 2,
+          status: "running",
+          attempts: 2,
+          model_tier: "standard",
+          started_at: "2026-04-29T09:06:00.000Z",
+        },
+      ],
+    });
+
+    const textResult = await runCli([
+      "node",
+      "qrspi",
+      "slice",
+      "status",
+      "--root",
+      projectRoot,
+      "--feature",
+      "slice-status",
+    ]);
+    const jsonResult = await runCli([
+      "node",
+      "qrspi",
+      "slice",
+      "status",
+      "--root",
+      projectRoot,
+      "--feature",
+      "slice-status",
+      "--json",
+    ]);
+    const payload = JSON.parse(jsonResult.stdout) as {
+      ok: boolean;
+      command: string;
+      feature_id: string;
+      data: {
+        current_slice_order?: number;
+        slices: Array<{
+          slice_order: number;
+          slice_name: string;
+          status: string;
+          started_at?: string;
+        }>;
+      };
+    };
+
+    expect(textResult.code).toBe(0);
+    expect(textResult.stdout).toContain("Slice Status (Feature: slice-status)");
+    expect(textResult.stdout).toContain("Current Slice Order: 2");
+    expect(textResult.stdout).toContain("[1] core-state");
+    expect(textResult.stdout).toContain("status: completed");
+    expect(textResult.stdout).toContain("start_time: 2026-04-29T09:00:00.000Z");
+    expect(textResult.stdout).toContain("[2] status-surface");
+
+    expect(jsonResult.code).toBe(0);
+    expect(payload.ok).toBe(true);
+    expect(payload.command).toBe("slice status");
+    expect(payload.feature_id).toBe("slice-status");
+    expect(payload.data.current_slice_order).toBe(2);
+    expect(payload.data.slices).toHaveLength(2);
+    expect(payload.data.slices[0]).toMatchObject({
+      slice_order: 1,
+      slice_name: "core-state",
+      status: "completed",
+      started_at: "2026-04-29T09:00:00.000Z",
+    });
+  });
+
+  it("returns empty slices when slice execution state is missing", async () => {
+    await createWorkflow(projectRoot, "slice-empty", "I", "ready");
+
+    const textResult = await runCli([
+      "node",
+      "qrspi",
+      "slice",
+      "status",
+      "--root",
+      projectRoot,
+      "--feature",
+      "slice-empty",
+    ]);
+    const jsonResult = await runCli([
+      "node",
+      "qrspi",
+      "slice",
+      "status",
+      "--root",
+      projectRoot,
+      "--feature",
+      "slice-empty",
+      "--json",
+    ]);
+    const payload = JSON.parse(jsonResult.stdout) as {
+      data: { slices: unknown[] };
+    };
+
+    expect(textResult.code).toBe(0);
+    expect(textResult.stdout).toContain("No slice execution state recorded");
+    expect(payload.data.slices).toEqual([]);
+  });
+
+  it("resets a retryable slice to pending without triggering the engine", async () => {
+    const config = await createWorkflow(projectRoot, "slice-retry", "I", "failed");
+    await writeSliceExecutionState(config, {
+      featureId: "slice-retry",
+      current_slice_order: 2,
+      updatedAt: "2026-04-29T10:00:00.000Z",
+      slices: [
+        {
+          slice_name: "completed-slice",
+          slice_order: 1,
+          status: "completed",
+          attempts: 1,
+          model_tier: "low",
+        },
+        {
+          slice_name: "failed-slice",
+          slice_order: 2,
+          status: "failed",
+          attempts: 2,
+          model_tier: "standard",
+          run_dir: "/tmp/old-run",
+          started_at: "2026-04-29T09:00:00.000Z",
+          finished_at: "2026-04-29T09:05:00.000Z",
+          reported_status: "DONE_WITH_CONCERNS",
+          last_error: "previous failure",
+        },
+      ],
+    });
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "slice",
+      "retry",
+      "--root",
+      projectRoot,
+      "--feature",
+      "slice-retry",
+      "--slice",
+      "2",
+      "--no-trigger",
+      "--json",
+    ]);
+    const sliceState = await readSliceExecutionState(config);
+    const payload = JSON.parse(result.stdout) as {
+      data: {
+        triggered: boolean;
+        retried_slice: {
+          slice_order: number;
+          status: string;
+          attempts: number;
+          run_dir?: string;
+          last_error?: string;
+        };
+      };
+    };
+
+    expect(result.code).toBe(0);
+    expect(payload.data.triggered).toBe(false);
+    expect(payload.data.retried_slice).toMatchObject({
+      slice_order: 2,
+      status: "pending",
+      attempts: 2,
+    });
+    expect(payload.data.retried_slice.run_dir).toBeUndefined();
+    expect(payload.data.retried_slice.last_error).toBeUndefined();
+    expect(sliceState?.current_slice_order).toBe(2);
+    expect(sliceState?.slices[0]?.status).toBe("completed");
+    expect(sliceState?.slices[1]?.status).toBe("pending");
+  });
+
+  it("triggers the engine when retrying with --no-trigger=false", async () => {
+    const config = await createWorkflow(projectRoot, "slice-retry-trigger", "I", "failed");
+    await writeWorkTree(config, {
+      slices: [
+        {
+          name: "retry-me",
+          description: "Retry this slice",
+          order: 1,
+          checkpoint: "slice completes",
+          tasks: [
+            { id: "t1", description: "work", estimated_minutes: 5, context_budget: "low", dependencies: [] },
+          ],
+        },
+      ],
+    });
+    await writeSliceExecutionState(config, {
+      featureId: "slice-retry-trigger",
+      current_slice_order: 1,
+      updatedAt: "2026-04-29T10:00:00.000Z",
+      slices: [
+        {
+          slice_name: "retry-me",
+          slice_order: 1,
+          status: "failed",
+          attempts: 1,
+          model_tier: "standard",
+          last_error: "previous failure",
+        },
+      ],
+    });
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "slice",
+      "retry",
+      "--root",
+      projectRoot,
+      "--feature",
+      "slice-retry-trigger",
+      "--slice",
+      "1",
+      "--no-trigger=false",
+      "--runner",
+      "mock",
+      "--json",
+    ]);
+    const sliceState = await readSliceExecutionState(config);
+    const payload = JSON.parse(result.stdout) as {
+      data: {
+        triggered: boolean;
+        retried_slice: { status: string; attempts: number };
+        workflow?: { current_stage: string; engine_status: string };
+      };
+    };
+
+    expect(result.code).toBe(0);
+    expect(payload.data.triggered).toBe(true);
+    expect(payload.data.retried_slice.status).toBe("completed");
+    expect(payload.data.retried_slice.attempts).toBe(2);
+    expect(payload.data.workflow?.current_stage).toBe("PR");
+    expect(sliceState?.slices[0]?.status).toBe("completed");
+  });
+
+  it("rejects invalid slice retry orders", async () => {
+    const config = await createWorkflow(projectRoot, "slice-retry-invalid", "I", "failed");
+    await writeSliceExecutionState(config, {
+      featureId: "slice-retry-invalid",
+      current_slice_order: 1,
+      updatedAt: "2026-04-29T10:00:00.000Z",
+      slices: [
+        {
+          slice_name: "failed-slice",
+          slice_order: 1,
+          status: "failed",
+          attempts: 1,
+          model_tier: "standard",
+        },
+      ],
+    });
+
+    const result = await runCli([
+      "node",
+      "qrspi",
+      "slice",
+      "retry",
+      "--root",
+      projectRoot,
+      "--feature",
+      config.featureId,
+      "--slice",
+      "9",
+    ]);
+
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("Slice order not found: 9");
   });
 });

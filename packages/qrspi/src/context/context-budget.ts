@@ -11,7 +11,7 @@ import type {
 
 export const DEFAULT_CONTEXT_TARGET_UTILIZATION = 0.4;
 export const DEFAULT_CONTEXT_SWITCH_THRESHOLD_UTILIZATION = 0.6;
-export const DEFAULT_MAX_CONTEXT_SIZE = 20_000;
+export const DEFAULT_MAX_CONTEXT_SIZE = 50_000;
 
 export function createDefaultContextBudgetConfig(
   overrides: Partial<ContextBudgetConfig> = {},

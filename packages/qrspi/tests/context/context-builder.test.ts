@@ -121,4 +121,47 @@ describe("context builder", () => {
     expect(rDep.includedContent).not.toBe(largeR);
     expect(context.budget.dependencies.map((dep) => dep.stage)).toEqual(["Q", "R", "D", "S"]);
   });
+
+  it("falls back to Q summary and R full for D when full Q/R is over budget", async () => {
+    const largeQ = [
+      "# Questions",
+      "## Risks",
+      "- Keep the gate context concise",
+      ...Array.from({ length: 80 }, (_, i) => `Q detail ${i + 1} ${"x".repeat(20)}`),
+    ].join("\n");
+    const research = [
+      "# Research Report",
+      "## Codebase Technical Map",
+      "- Engine owns workflow state",
+      "- Runner metadata records model selection",
+    ].join("\n");
+
+    await writeArtifact(config, {
+      stage: "Q",
+      title: "Q - Questions",
+      content: largeQ,
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+    await writeArtifact(config, {
+      stage: "R",
+      title: "R - Research",
+      content: research,
+      generatedAt: new Date().toISOString(),
+      artifactPath: "",
+    });
+
+    const context = await buildBudgetedContextPack("D", config, {
+      budgetConfig: { maxContextSize: 1_500 },
+    });
+    const qDep = context.dependencies.find((dep) => dep.stage === "Q")!;
+    const rDep = context.dependencies.find((dep) => dep.stage === "R")!;
+
+    expect(qDep.layer).toBe("summary");
+    expect(qDep.includedContent).not.toBe(largeQ);
+    expect(qDep.includedContent).toContain("Keep the gate context concise");
+    expect(rDep.layer).toBe("full");
+    expect(rDep.includedContent).toBe(research);
+    expect(context.budget.status).toBe("within_target");
+  });
 });

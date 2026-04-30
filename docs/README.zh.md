@@ -349,6 +349,27 @@ qrspi slice list
 - 避免把所有集成推迟到最后
 - 每个切片可以是干净 Context 的新 Session
 
+当 `.qrspi/<feature>/slices/work_tree.json` 存在时，`I` 阶段会按
+`WorkTree` slice 拆成多个独立 runner session。每个 slice 都会有独立
+prompt、context pack、run directory、validation 和状态记录，状态持久化在
+`.qrspi/<feature>/slices/slice_state.json`；全部完成后再聚合为最终 `I`
+artifact。
+
+slice task 的 `model_tier` 会参与 runner model 选择：
+
+```bash
+# CLI --model 仍然覆盖所有 tier
+qrspi run --runner codex --model gpt-5.5
+
+# 按 tier 覆盖模型
+export QRSPI_CODEX_MODEL_LOW=gpt-5.4-mini
+export QRSPI_CODEX_MODEL_STANDARD=gpt-5.4
+export QRSPI_CODEX_MODEL_POWERFUL=gpt-5.5
+```
+
+解析优先级为：CLI `--model` > `QRSPI_<RUNNER>_MODEL_<TIER>` >
+`QRSPI_MODEL_<TIER>` > `QRSPI_<RUNNER>_MODEL` > `QRSPI_MODEL` > tier 默认值。
+
 ### 3. 自动化闭环
 
 当前版本已经支持一条基础自动化主链：

@@ -199,7 +199,7 @@ This keeps the GUI as handoff and evidence preparation, not a second workflow en
 
 - Full Feishu two-way sync: defer because 1A only supports manual link / pasted markdown intake.
 - Shared team storage: defer until at least 3 real dogfood requirements prove the local reviewer queue is valuable.
-- Automatic model routing: defer because W-stage `model_tier` is not yet consumed by the runner system.
+- Dashboard-owned automatic model routing controls: defer for 1A; the CLI now consumes W-stage `model_tier` during I-stage slice execution.
 - Full traceability platform: defer because 1A is only gate visibility and handoff, not requirement-code-test lineage.
 - GUI-owned workflow state mutation: explicitly rejected because `qrspi` CLI remains the only state machine.
 - Marketing site or landing page design: not applicable because workbench is App UI.
@@ -421,7 +421,7 @@ Critical gaps: none after adopting the decisions above. Before those decisions, 
 
 - Full Feishu two-way sync: manual link / pasted markdown remains enough for dogfood.
 - Shared team storage: wait until 3 real requirements prove reviewer queue value.
-- Automatic model routing: `model_tier` can be displayed, but runner policy consumption waits.
+- Dashboard-owned automatic model routing controls: display `model_tier` and CLI-resolved runner/model metadata; policy consumption now lives in the CLI.
 - Full traceability platform: defer requirement-code-test lineage.
 - GUI-owned state mutation: rejected; all state changes go through `qrspi`.
 - Browser-executed CLI: do not make the static dashboard execute local commands directly in 1A.

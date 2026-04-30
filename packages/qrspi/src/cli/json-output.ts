@@ -8,6 +8,7 @@ import {
   readArtifact,
   readEngineState,
   readGateReviewRecords,
+  readSliceExecutionState,
   readStructuredArtifact,
   resolveArtifactPointer,
   readWorkflowState,
@@ -32,6 +33,9 @@ import type {
   OutputFormat,
   RunCommandData,
   SessionConfig,
+  SliceExecutionState,
+  SliceRetryCommandData,
+  SliceStatusCommandData,
   StageCode,
   StageCommandData,
   StageRunSummary,
@@ -510,6 +514,7 @@ export async function buildStatusJson(
   const artifacts = await buildArtifactsEnvelope(config, state.currentStage);
   const currentGateContext = await resolveCurrentGateContext(config);
   const latestGateReview = (await readGateReviewRecords(config)).at(-1);
+  const sliceState = await readSliceExecutionState(config);
 
   const data: StatusCommandData = {
     workflow,
@@ -520,7 +525,55 @@ export async function buildStatusJson(
       : undefined,
     current_gate_context: currentGateContext,
     artifacts,
+    slices: sliceState?.slices,
     next_action: nextAction(state, engineState),
+  };
+
+  return createCliEnvelope(command, {
+    ok: true,
+    featureId: config.featureId,
+    data,
+  });
+}
+
+export function buildSliceStatusJson(
+  command: string,
+  config: SessionConfig,
+  sliceState: SliceExecutionState | null,
+): CliResponseEnvelope<SliceStatusCommandData> {
+  const data: SliceStatusCommandData = {
+    current_slice_order: sliceState?.current_slice_order,
+    slices: sliceState?.slices ?? [],
+  };
+
+  return createCliEnvelope(command, {
+    ok: true,
+    featureId: config.featureId,
+    data,
+  });
+}
+
+export function buildSliceRetryJson(
+  command: string,
+  config: SessionConfig,
+  sliceState: SliceExecutionState,
+  targetSliceOrder: number,
+  triggered: boolean,
+  state?: WorkflowState,
+  engineState?: EngineState,
+): CliResponseEnvelope<SliceRetryCommandData> {
+  const retriedSlice = sliceState.slices.find((slice) => slice.slice_order === targetSliceOrder);
+  if (!retriedSlice) {
+    throw new Error(`Slice order not found: ${targetSliceOrder}`);
+  }
+
+  const data: SliceRetryCommandData = {
+    target_slice_order: targetSliceOrder,
+    triggered,
+    current_slice_order: sliceState.current_slice_order,
+    retried_slice: retriedSlice,
+    slices: sliceState.slices,
+    workflow: state && engineState ? buildWorkflowSummary(state, engineState) : undefined,
   };
 
   return createCliEnvelope(command, {
@@ -699,6 +752,7 @@ async function buildRunSummaryItem(
     structured_artifact: structuredArtifact.exists
       ? relativizeArtifactPointer(config, structuredArtifact)
       : undefined,
+    slices: result.sliceResults,
     runner_output: includeRunnerOutput
       ? await runnerOutputForResult(config, result)
       : undefined,

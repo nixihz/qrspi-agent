@@ -11,6 +11,8 @@ import type {
   GateStageCode,
   SessionConfig,
   SessionStatus,
+  SliceExecutionRecord,
+  SliceExecutionState,
   StageArtifact,
   StageCode,
   WorkTree,
@@ -349,6 +351,65 @@ export async function readWorkTree(
   const layout = resolveFileStoreLayout(config);
   const workTreePath = join(layout.slicesDir, "work_tree.json");
   return readJson<WorkTree>(workTreePath);
+}
+
+export async function writeSliceExecutionState(
+  config: SessionConfig,
+  state: SliceExecutionState,
+): Promise<void> {
+  const layout = resolveFileStoreLayout(config);
+  await ensureDir(layout.slicesDir);
+  const statePath = join(layout.slicesDir, "slice_state.json");
+  await writeJson(statePath, state);
+}
+
+export async function readSliceExecutionState(
+  config: SessionConfig,
+): Promise<SliceExecutionState | null> {
+  const layout = resolveFileStoreLayout(config);
+  const statePath = join(layout.slicesDir, "slice_state.json");
+  return readJson<SliceExecutionState>(statePath);
+}
+
+export function isSliceRetryable(record: SliceExecutionRecord): boolean {
+  return record.status !== "running";
+}
+
+export async function resetSliceExecutionState(
+  config: SessionConfig,
+  targetOrder: number,
+): Promise<SliceExecutionState> {
+  const existing = await readSliceExecutionState(config);
+  if (!existing) {
+    throw new Error("No slice execution state recorded");
+  }
+
+  const targetIndex = existing.slices.findIndex((slice) => slice.slice_order === targetOrder);
+  const target = existing.slices[targetIndex];
+  if (!target) {
+    throw new Error(`Slice order not found: ${targetOrder}`);
+  }
+  if (!isSliceRetryable(target)) {
+    throw new Error(`Slice ${targetOrder} is currently running and cannot be retried`);
+  }
+
+  const slices = [...existing.slices];
+  slices[targetIndex] = {
+    slice_name: target.slice_name,
+    slice_order: target.slice_order,
+    status: "pending",
+    attempts: target.attempts,
+    model_tier: target.model_tier,
+  };
+
+  const updated: SliceExecutionState = {
+    ...existing,
+    current_slice_order: targetOrder,
+    slices,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeSliceExecutionState(config, updated);
+  return updated;
 }
 
 export async function createRunDir(

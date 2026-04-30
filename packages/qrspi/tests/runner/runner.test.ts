@@ -3,7 +3,14 @@ import { tmpdir } from "os";
 import { delimiter, join } from "path";
 import { describe, it, expect } from "vitest";
 import { buildCodexExecArgs, CodexRunner, sanitizeCodexStderr } from "../../src/runner/codex-runner.js";
-import { buildRunner, resolveRunnerName, resolveRunnerModel, supportedRunnerNames } from "../../src/runner/index.js";
+import {
+  buildRunner,
+  resolveRunnerName,
+  resolveRunnerModel,
+  resolveRunnerModelForTier,
+  resolveSliceModelTier,
+  supportedRunnerNames,
+} from "../../src/runner/index.js";
 import { MockRunner } from "../../src/runner/mock-runner.js";
 import type { RunnerExecInput } from "../../src/workflow/types.js";
 
@@ -27,6 +34,55 @@ describe("runner", () => {
     expect(resolveRunnerModel("mock")).toBe("gpt-5.4");
     expect(resolveRunnerModel("claude")).toBe("kimi-for-coding");
     expect(resolveRunnerModel("codex")).toBe("gpt-5.4");
+  });
+
+  it("resolves runner model by model tier with CLI override first", () => {
+    expect(resolveRunnerModelForTier("codex", "low").model).toBe("gpt-5.4-mini");
+    expect(resolveRunnerModelForTier("codex", "standard").model).toBe("gpt-5.4");
+    expect(resolveRunnerModelForTier("codex", "powerful").model).toBe("gpt-5.5");
+    expect(resolveRunnerModelForTier("codex", "powerful", "cli-model")).toMatchObject({
+      model: "cli-model",
+      source: "cli",
+      model_tier: "powerful",
+    });
+  });
+
+  it("resolves tier-specific model environment overrides", () => {
+    const previousRunnerTier = process.env.QRSPI_CODEX_MODEL_POWERFUL;
+    const previousTier = process.env.QRSPI_MODEL_POWERFUL;
+    try {
+      process.env.QRSPI_MODEL_POWERFUL = "global-powerful";
+      expect(resolveRunnerModelForTier("codex", "powerful")).toMatchObject({
+        model: "global-powerful",
+        source: "tier_env",
+        env_var: "QRSPI_MODEL_POWERFUL",
+      });
+
+      process.env.QRSPI_CODEX_MODEL_POWERFUL = "codex-powerful";
+      expect(resolveRunnerModelForTier("codex", "powerful")).toMatchObject({
+        model: "codex-powerful",
+        source: "runner_tier_env",
+        env_var: "QRSPI_CODEX_MODEL_POWERFUL",
+      });
+    } finally {
+      if (previousRunnerTier === undefined) delete process.env.QRSPI_CODEX_MODEL_POWERFUL;
+      else process.env.QRSPI_CODEX_MODEL_POWERFUL = previousRunnerTier;
+      if (previousTier === undefined) delete process.env.QRSPI_MODEL_POWERFUL;
+      else process.env.QRSPI_MODEL_POWERFUL = previousTier;
+    }
+  });
+
+  it("promotes a slice to its most powerful task model tier", () => {
+    expect(resolveSliceModelTier({
+      name: "mixed",
+      description: "mixed complexity",
+      order: 1,
+      checkpoint: "done",
+      tasks: [
+        { id: "t1", description: "simple", estimated_minutes: 5, context_budget: "low", dependencies: [], model_tier: "low" },
+        { id: "t2", description: "broad", estimated_minutes: 30, context_budget: "high", dependencies: ["t1"], model_tier: "powerful" },
+      ],
+    })).toBe("powerful");
   });
 
   it("builds mock runner", () => {

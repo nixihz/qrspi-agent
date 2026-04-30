@@ -14,6 +14,7 @@ describe("context budget basics", () => {
     expect(config.unit).toBe("character");
     expect(config.targetUtilization).toBe(0.4);
     expect(config.switchThresholdUtilization).toBe(0.6);
+    expect(config.maxContextSize).toBe(50_000);
   });
 
   it("supports full mode overrides", () => {

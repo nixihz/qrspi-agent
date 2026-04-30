@@ -1,4 +1,12 @@
-import type { WorkflowState, EngineState, StageCode } from "../workflow/types.js";
+import type {
+  WorkflowState,
+  EngineState,
+  SliceExecutionState,
+  SliceExecutionStatus,
+  SliceStatusCommandData,
+  SliceStatusTextOptions,
+  StageCode,
+} from "../workflow/types.js";
 import {
   getStageOrder,
   getStageName,
@@ -16,6 +24,7 @@ const STAGE_ICONS: Record<string, string> = {
 export function formatStatusOutput(
   state: WorkflowState,
   engineState: EngineState,
+  sliceState?: SliceExecutionState | null,
 ): string {
   const order = getStageOrder();
   const currentIdx = order.indexOf(state.currentStage);
@@ -53,6 +62,8 @@ export function formatStatusOutput(
   lines.push(`Runner: claude`);
   lines.push(`Model: kimi-for-coding`);
 
+  appendSliceSummary(lines, sliceState);
+
   return lines.join("\n");
 }
 
@@ -69,6 +80,38 @@ export function formatStageOutput(state: WorkflowState): string {
     `   Kind: ${kindLabel}`,
     `   Output Directory: .qrspi/${state.featureId}`,
   ].join("\n");
+}
+
+export function formatSliceStatusOutput(
+  data: SliceStatusCommandData,
+  options: SliceStatusTextOptions,
+): string {
+  const lines: string[] = [
+    `[QRSPI] Slice Status (Feature: ${options.featureId})`,
+    "",
+  ];
+
+  if (typeof options.currentSliceOrder === "number") {
+    lines.push(`Current Slice Order: ${options.currentSliceOrder}`);
+  }
+
+  if (data.slices.length === 0) {
+    lines.push("[QRSPI] No slice execution state recorded");
+    return lines.join("\n");
+  }
+
+  if (typeof options.currentSliceOrder === "number") {
+    lines.push("");
+  }
+
+  for (const slice of data.slices) {
+    lines.push(`- [${slice.slice_order}] ${slice.slice_name}`);
+    lines.push(`  status: ${slice.status}`);
+    lines.push(`  start_time: ${slice.started_at ?? "-"}`);
+    lines.push(`  attempts: ${slice.attempts}`);
+  }
+
+  return lines.join("\n");
 }
 
 export function formatRunResults(
@@ -151,4 +194,42 @@ export function print(msg: string): void {
 
 export function printErr(msg: string): void {
   process.stderr.write(msg + "\n");
+}
+
+function appendSliceSummary(lines: string[], sliceState?: SliceExecutionState | null): void {
+  if (!sliceState || sliceState.slices.length === 0) {
+    return;
+  }
+
+  lines.push("");
+  lines.push(
+    typeof sliceState.current_slice_order === "number"
+      ? `Slice Summary (current: ${sliceState.current_slice_order})`
+      : "Slice Summary",
+  );
+
+  for (const slice of sliceState.slices) {
+    lines.push(
+      `  ${getSliceStatusMarker(slice.status)} [${slice.slice_order}] ${slice.slice_name} | `
+      + `status=${slice.status} | start=${slice.started_at ?? "-"}`,
+    );
+  }
+}
+
+function getSliceStatusMarker(status: SliceExecutionStatus): string {
+  switch (status) {
+    case "completed":
+      return "✓";
+    case "running":
+      return ">>>";
+    case "failed":
+      return "!";
+    case "blocked":
+      return "x";
+    case "needs_context":
+      return "?";
+    case "pending":
+    default:
+      return "○";
+  }
 }

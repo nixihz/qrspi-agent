@@ -46,26 +46,32 @@
 
 ## 实现 slice 级自动执行
 
-- **状态：** 候选 backlog。
-- **内容：** 将 `WorkTree` slices 作为独立实现单元执行，而不是在一个 runner session 中执行整个 `I` 阶段。
+- **状态：** 已完成（2026-04-29）。
+- **内容：** 已将 `WorkTree` slices 作为独立实现单元执行，而不是在一个 runner session 中执行整个 `I` 阶段。
 - **原因：** QRSPI 的 vertical slicing 目前只实现了一部分。`W` 阶段可以定义 slices，但 `I` 阶段仍然作为一个大任务整体运行，这削弱了隔离性、可 review 性和重试行为。
-- **建议范围：**
-  - 在 `.qrspi/<feature_id>/slices/` 下持久化每个 slice 的执行状态。
-  - 每次运行一个 slice，并为它生成独立 prompt、context pack、run directory、validation 和 status。
-  - 将 slice 结果聚合成最终 `I` 阶段 artifact。
-  - gate 推进继续由现有 engine 控制；不要创建第二套状态机。
-- **依赖 / 阻塞：** 需要先做一轮小型 engine 设计，因为这会改变执行语义、run history 和重试行为。
+- **完成范围：**
+  - 已在 `.qrspi/<feature_id>/slices/slice_state.json` 持久化每个 slice 的执行状态、attempt、run dir、validation、runner/model metadata。
+  - `I` 阶段现在会按 WorkTree slice 逐个调用 runner；每个 slice 都有独立 prompt、context pack、run directory、live output、validation 和 parsed artifact。
+  - 全部 slice 成功后会聚合成最终 `I` 阶段 artifact，并写入一次成功的 stage-level I history，PR 前置条件继续沿用现有 engine 语义。
+  - gate 推进仍由现有 engine 控制，没有引入第二套 workflow 状态机。
+- **验证：**
+  - `npm run lint --workspace=packages/qrspi`
+  - `npm test --workspace=packages/qrspi -- tests/runner/runner.test.ts tests/engine/engine.test.ts`
 
 ## 在 runner 选择中消费 WorkTree `model_tier`
 
-- **状态：** 候选 backlog。
-- **内容：** 使用每个 slice 的 `model_tier`（`low` / `standard` / `powerful`）自动选择合适的 runner model。
+- **状态：** 已完成（2026-04-29）。
+- **内容：** 已使用每个 slice 的 `model_tier`（`low` / `standard` / `powerful`）自动选择合适的 runner model。
 - **原因：** WorkTree 已经记录了任务复杂度，但 runner 系统目前没有使用它。只有当 slices 能独立执行时，model routing 的价值才会真正体现出来。
-- **建议范围：**
-  - 增加 model-tier resolver，提供明确默认值并支持环境变量覆盖。
-  - 在 run metadata 中记录解析后的 runner/model。
-  - 保持 CLI `--model` 为最高优先级 override。
-- **依赖 / 阻塞：** 最好在 slice 级自动执行之后实现，或与它一起实现。
+- **完成范围：**
+  - 已新增 model-tier resolver，slice tier 由该 slice 内最强 task tier 决定；缺失时默认 `standard`。
+  - Codex tier 默认值为 `low=gpt-5.4-mini`、`standard=gpt-5.4`、`powerful=gpt-5.5`；Claude 和 mock 保持各自稳定默认值。
+  - 支持 `QRSPI_<RUNNER>_MODEL_<TIER>`、`QRSPI_MODEL_<TIER>`、`QRSPI_<RUNNER>_MODEL`、`QRSPI_MODEL` 环境变量覆盖。
+  - CLI `--model` 仍保持最高优先级，会覆盖所有 tier routing。
+  - slice runner metadata 和 `slice_state.json` 已记录解析后的 runner/model/model_tier/source。
+- **验证：**
+  - `npm run lint --workspace=packages/qrspi`
+  - `npm test --workspace=packages/qrspi -- tests/runner/runner.test.ts tests/engine/engine.test.ts`
 
 ## 增加 CI/CD 覆盖
 

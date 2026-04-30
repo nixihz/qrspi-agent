@@ -392,6 +392,27 @@ qrspi slice list
 - Avoid deferring all integration to the end
 - Each slice can be a fresh session with clean context
 
+During the `I` stage, QRSPI now executes `WorkTree` slices as separate runner
+sessions when `.qrspi/<feature>/slices/work_tree.json` exists. Each slice gets
+its own prompt, context pack, run directory, validation result, and status in
+`.qrspi/<feature>/slices/slice_state.json`; after all slices complete, QRSPI
+aggregates them into the final `I` artifact.
+
+Slice task `model_tier` values also drive runner model selection:
+
+```bash
+# CLI --model still overrides every tier
+qrspi run --runner codex --model gpt-5.5
+
+# Tier-specific environment overrides
+export QRSPI_CODEX_MODEL_LOW=gpt-5.4-mini
+export QRSPI_CODEX_MODEL_STANDARD=gpt-5.4
+export QRSPI_CODEX_MODEL_POWERFUL=gpt-5.5
+```
+
+Resolution order is: CLI `--model` > `QRSPI_<RUNNER>_MODEL_<TIER>` >
+`QRSPI_MODEL_<TIER>` > `QRSPI_<RUNNER>_MODEL` > `QRSPI_MODEL` > tier default.
+
 ### 3. Automated Closed Loop
 
 The current version already supports a basic automation chain:

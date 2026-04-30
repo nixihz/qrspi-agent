@@ -25,11 +25,14 @@ import type {
   SessionConfig,
   SliceAddCommandOptions,
   SliceDefinition,
+  SliceRetryCommandOptions,
+  SliceStatusCommandOptions,
   ContextPack,
 } from "../workflow/types.js";
 import {
   initWorkflow,
   runWorkflow,
+  resumeSliceExecution,
   approveCurrentStage,
   rejectCurrentStage,
   rewindWorkflowStage,
@@ -41,11 +44,14 @@ import {
   createInitialWorkflowState,
   createInitialEngineState,
   readWorkTree,
+  readSliceExecutionState,
+  resetSliceExecutionState,
   writeWorkTree,
   listFeatures,
 } from "../storage/file-repository.js";
 import { buildRunner, resolveRunnerName } from "../runner/index.js";
 import {
+  formatSliceStatusOutput,
   formatStatusOutput,
   formatStageOutput,
   formatApproveResult,
@@ -63,6 +69,8 @@ import {
   buildRewindJson,
   buildRejectJson,
   buildRunJson,
+  buildSliceRetryJson,
+  buildSliceStatusJson,
   buildStageJson,
   buildStatusJson,
   isJsonOutputRequested,
@@ -280,6 +288,14 @@ function buildPromptExportFilename(stage: StageCode, lang: Lang): string {
 function normalizeLegacyPromptArgs(argv: string[]): string[] {
   const normalized = [...argv];
 
+  for (let i = 0; i < normalized.length; i++) {
+    if (normalized[i] === "--no-trigger=false") {
+      normalized[i] = "--trigger";
+    } else if (normalized[i] === "--no-trigger=true") {
+      normalized[i] = "--no-trigger";
+    }
+  }
+
   if (normalized[2] === "prompts" && normalized[3] === "export") {
     normalized.splice(2, 2, "prompt", "export");
     return normalized;
@@ -334,7 +350,8 @@ export async function handleStatusCommand(
     return 0;
   }
 
-  print(formatStatusOutput(state, engine));
+  const sliceState = await readSliceExecutionState(config);
+  print(formatStatusOutput(state, engine, sliceState));
   return 0;
 }
 
@@ -776,6 +793,107 @@ export async function handleSliceListCommand(
   return 0;
 }
 
+export async function handleSliceStatusCommand(
+  opts: SliceStatusCommandOptions,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts, "slice status");
+  if (!config) {
+    return 1;
+  }
+
+  const sliceState = await readSliceExecutionState(config);
+  if (isJsonOutputRequested(opts)) {
+    writeCliResponse(buildSliceStatusJson("slice status", config, sliceState), "json");
+    return 0;
+  }
+
+  print(formatSliceStatusOutput(
+    {
+      current_slice_order: sliceState?.current_slice_order,
+      slices: sliceState?.slices ?? [],
+    },
+    {
+      featureId: config.featureId,
+      currentSliceOrder: sliceState?.current_slice_order,
+    },
+  ));
+  return 0;
+}
+
+export async function handleSliceRetryCommand(
+  opts: SliceRetryCommandOptions,
+): Promise<number> {
+  const config = await requireFeatureConfig(opts, "slice retry");
+  if (!config) {
+    return 1;
+  }
+
+  const targetSliceOrder = Number(opts.slice);
+  if (!Number.isInteger(targetSliceOrder) || targetSliceOrder < 1) {
+    printCommandError("slice retry", opts, {
+      code: "SLICE_RETRY_FAILED",
+      message: "[QRSPI] Error: --slice must be a positive integer",
+      feature: config.featureId,
+    });
+    return 1;
+  }
+
+  try {
+    const resetState = await resetSliceExecutionState(config, targetSliceOrder);
+    const shouldTrigger = opts.trigger !== false;
+    let workflowState = (await readWorkflowState(config)) ?? createInitialWorkflowState(config);
+    let engineState = (await readEngineState(config)) ?? createInitialEngineState(config);
+
+    if (shouldTrigger) {
+      const runnerName = resolveRunnerName(opts.runner);
+      const runner = buildRunner(runnerName, { model: opts.model });
+      const result = await resumeSliceExecution(config, runner, targetSliceOrder, {
+        ...opts,
+        maxStages: 1,
+      });
+      workflowState = result.workflowState;
+      engineState = result.engineState;
+    }
+
+    const finalSliceState = (await readSliceExecutionState(config)) ?? resetState;
+
+    if (isJsonOutputRequested(opts)) {
+      writeCliResponse(
+        buildSliceRetryJson(
+          "slice retry",
+          config,
+          finalSliceState,
+          targetSliceOrder,
+          shouldTrigger,
+          workflowState,
+          engineState,
+        ),
+        "json",
+      );
+      return 0;
+    }
+
+    const retriedSlice = finalSliceState.slices.find((slice) => slice.slice_order === targetSliceOrder);
+    print(`[QRSPI] Retried slice: [${targetSliceOrder}] ${retriedSlice?.slice_name ?? "unknown"}`);
+    print(`[QRSPI] Slice status: ${retriedSlice?.status ?? "pending"}`);
+    if (shouldTrigger) {
+      print(`[QRSPI] Engine rerun triggered from slice ${targetSliceOrder}`);
+      print(`Current Stage: ${workflowState.currentStage} - ${getStageName(workflowState.currentStage)}`);
+      print(`Engine Status: ${engineState.status}`);
+    } else {
+      print("[QRSPI] Engine rerun skipped (--no-trigger)");
+    }
+    return 0;
+  } catch (error) {
+    printCommandError("slice retry", opts, {
+      code: "SLICE_RETRY_FAILED",
+      message: `[QRSPI] Error: ${error instanceof Error ? error.message : String(error)}`,
+      feature: config.featureId,
+    });
+    return 1;
+  }
+}
+
 export async function handleSliceAddCommand(
   opts: SliceAddCommandOptions,
   name: string,
@@ -1006,6 +1124,25 @@ export async function main(argv?: string[]): Promise<number> {
     sliceCmd.command("list").description("List slices")
   ).action(async (opts: FeatureScopedCommandOptions) => {
     const code = await handleSliceListCommand(opts);
+    process.exitCode = code;
+  });
+
+  featureScopedOpts(
+    sliceCmd.command("status").description("Show slice execution status")
+  ).action(async (opts: SliceStatusCommandOptions) => {
+    const code = await handleSliceStatusCommand(opts);
+    process.exitCode = code;
+  });
+
+  featureScopedOpts(
+    sliceCmd
+      .command("retry")
+      .description("Reset a slice to pending and optionally resume implementation")
+      .requiredOption("--slice <order>", "Slice order to retry", parseInt)
+      .option("--trigger", "Immediately rerun the engine after reset", true)
+      .option("--no-trigger", "Reset without immediately rerunning the engine")
+  ).action(async (opts: SliceRetryCommandOptions) => {
+    const code = await handleSliceRetryCommand(opts);
     process.exitCode = code;
   });
 

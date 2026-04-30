@@ -2,9 +2,21 @@ import type { Runner, RunnerName, RunnerOptions } from "../workflow/types.js";
 import { MockRunner } from "./mock-runner.js";
 import { ClaudeRunner } from "./claude-runner.js";
 import { CodexRunner } from "./codex-runner.js";
-import { resolveRunnerName, resolveRunnerModel, supportedRunnerNames } from "./model-resolver.js";
+import {
+  resolveRunnerName,
+  resolveRunnerModel,
+  resolveRunnerModelForTier,
+  resolveSliceModelTier,
+  supportedRunnerNames,
+} from "./model-resolver.js";
 
-export { resolveRunnerName, resolveRunnerModel, supportedRunnerNames };
+export {
+  resolveRunnerName,
+  resolveRunnerModel,
+  resolveRunnerModelForTier,
+  resolveSliceModelTier,
+  supportedRunnerNames,
+};
 
 export function buildRunner(name: RunnerName, options: RunnerOptions = {}): Runner {
   switch (name) {

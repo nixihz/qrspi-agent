@@ -27,6 +27,31 @@ export type WorkflowInputErrorCode =
 
 export type ModelTier = "low" | "standard" | "powerful";
 
+export type ModelResolutionSource =
+  | "cli"
+  | "runner_tier_env"
+  | "tier_env"
+  | "runner_env"
+  | "global_env"
+  | "tier_default"
+  | "runner_default";
+
+export interface ModelResolution {
+  runner: RunnerName;
+  model: string;
+  source: ModelResolutionSource;
+  model_tier?: ModelTier;
+  env_var?: string;
+}
+
+export type SliceExecutionStatus =
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed"
+  | "blocked"
+  | "needs_context";
+
 export type SessionStatus =
   | "idle"
   | "ready"
@@ -157,7 +182,22 @@ export interface StatusCommandData {
   latest_gate_review?: GateReviewRecord;
   current_gate_context?: CurrentGateContext;
   artifacts: ArtifactPointer[];
+  slices?: SliceExecutionRecord[];
   next_action: NextActionSummary;
+}
+
+export interface SliceStatusCommandData {
+  current_slice_order?: number;
+  slices: SliceExecutionRecord[];
+}
+
+export interface SliceRetryCommandData {
+  target_slice_order: number;
+  triggered: boolean;
+  current_slice_order?: number;
+  retried_slice: SliceExecutionRecord;
+  slices: SliceExecutionRecord[];
+  workflow?: WorkflowStatusSummary;
 }
 
 export interface StageCommandData {
@@ -186,6 +226,7 @@ export interface StageRunSummary {
   validation: ValidationSummary;
   artifact: ArtifactPointer;
   structured_artifact?: ArtifactPointer;
+  slices?: SliceExecutionRecord[];
   runner_output?: {
     stdout_file: string;
     stderr_file: string;
@@ -580,6 +621,7 @@ export interface StageValidator {
 
 export interface RunnerOptions {
   model?: string;
+  modelTier?: ModelTier;
   codexProfile?: string;
   codexConfig?: string;
   liveStdoutPath?: string;
@@ -681,6 +723,14 @@ export interface SliceAddCommandOptions extends FeatureScopedCommandOptions {
   checkpoint?: string;
 }
 
+export interface SliceStatusCommandOptions extends FeatureScopedCommandOptions {
+}
+
+export interface SliceRetryCommandOptions extends FeatureScopedCommandOptions {
+  slice: number;
+  trigger?: boolean;
+}
+
 export interface SliceDefinition {
   name: string;
   description: string;
@@ -703,6 +753,35 @@ export interface SliceTask {
 
 export interface WorkTree {
   slices: SliceDefinition[];
+}
+
+export interface SliceExecutionRecord {
+  slice_name: string;
+  slice_order: number;
+  status: SliceExecutionStatus;
+  attempts: number;
+  model_tier: ModelTier;
+  runner?: RunnerName;
+  model?: string;
+  model_resolution?: ModelResolution;
+  run_dir?: string;
+  started_at?: string;
+  finished_at?: string;
+  validation?: ValidationResult;
+  reported_status?: ImplementationStatus;
+  last_error?: string;
+}
+
+export interface SliceExecutionState {
+  featureId: string;
+  current_slice_order?: number;
+  slices: SliceExecutionRecord[];
+  updatedAt: string;
+}
+
+export interface SliceStatusTextOptions {
+  featureId: string;
+  currentSliceOrder?: number;
 }
 
 export interface FileStoreLayout {

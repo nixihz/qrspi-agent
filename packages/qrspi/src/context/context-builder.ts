@@ -12,6 +12,8 @@ import type {
   ContextCommandDependencyData,
   ContextLayer,
   IncludedContextDependency,
+  ContextSourceArtifact,
+  DependencyContextPlan,
 } from "../workflow/types.js";
 import { getStageDependencies } from "../workflow/stage-schema.js";
 import { resolveFileStoreLayout, buildArtifactFilename } from "../storage/path-resolver.js";
@@ -150,7 +152,14 @@ export async function buildBudgetedContextPack(
     return renderContextLayer(source, plan);
   });
   const promptOverhead = estimateContextSize("");
-  const audit = applyContextBudget(renderedDependencies, budgetConfig, promptOverhead);
+  const initialAudit = applyContextBudget(renderedDependencies, budgetConfig, promptOverhead);
+  const audit = stage === "D" && initialAudit.status !== "within_target"
+    ? applyContextBudget(
+      applyDesignStageFallback(renderedDependencies, plans, sources),
+      budgetConfig,
+      promptOverhead,
+    )
+    : initialAudit;
   const sourceWarnings = sources.flatMap((source) => source.warnings);
   const budget = {
     ...audit,
@@ -165,6 +174,30 @@ export async function buildBudgetedContextPack(
     workflow_input: options.workflowInput,
     budget,
   };
+}
+
+function applyDesignStageFallback(
+  dependencies: IncludedContextDependency[],
+  plans: DependencyContextPlan[],
+  sources: ContextSourceArtifact[],
+): IncludedContextDependency[] {
+  return dependencies.map((dependency) => {
+    if (dependency.stage !== "Q" || dependency.layer !== "full") {
+      return dependency;
+    }
+
+    const plan = plans.find((item) => item.dependency.stage === "Q");
+    const source = sources.find((item) => item.stage === "Q");
+    if (!plan || !source) return dependency;
+
+    return renderContextLayer(source, {
+      ...plan,
+      layer: "summary",
+      required: false,
+      priority: 5,
+      focusedFields: ["constraints", "risks", "evidence"],
+    });
+  });
 }
 
 export function formatBudgetedContextForPrompt(

@@ -7,12 +7,22 @@ import {
   initWorkflow,
   runSingleStage,
   runWorkflow,
+  resumeSliceExecution,
   approveCurrentStage,
   rejectCurrentStage,
   rewindWorkflowStage,
   advanceWorkflowStage,
 } from "../../src/engine/engine.js";
-import { writeWorkflowState, writeEngineState, writeArtifact } from "../../src/storage/file-repository.js";
+import {
+  readSliceExecutionState,
+  writeSliceExecutionState,
+  writeWorkflowState,
+  writeEngineState,
+  writeArtifact,
+  writeWorkTree,
+  createRunDir,
+  writeRunFile,
+} from "../../src/storage/file-repository.js";
 
 function createTempConfig(featureId = "test-feature"): SessionConfig {
   const tmpDir = mkdtempSync(join(tmpdir(), "qrspi-engine-test-"));
@@ -25,21 +35,26 @@ function createTempConfig(featureId = "test-feature"): SessionConfig {
 
 class TestRunner implements Runner {
   name = "mock" as const;
-  private output: string;
+  private output: string | ((input: RunnerExecInput, call: number) => string);
   calls = 0;
+  inputs: RunnerExecInput[] = [];
 
-  constructor(output: string) {
+  constructor(output: string | ((input: RunnerExecInput, call: number) => string)) {
     this.output = output;
   }
 
-  async run(_input: RunnerExecInput) {
+  async run(input: RunnerExecInput) {
     this.calls++;
+    this.inputs.push(input);
+    const stdout = typeof this.output === "function"
+      ? this.output(input, this.calls)
+      : this.output;
     return {
-      stdout: this.output,
+      stdout,
       stderr: "",
       exitCode: 0,
       durationMs: 100,
-      meta: {},
+      meta: { runner: "mock", model: input.options.model },
     };
   }
 }
@@ -178,6 +193,437 @@ describe("engine", () => {
     expect(result.artifact).toBeDefined();
   });
 
+  it("runSingleStage executes I stage work tree slices as separate runner sessions", async () => {
+    await initWorkflow(config);
+    const now = new Date().toISOString();
+    const workTree = {
+      slices: [
+        {
+          name: "core-state",
+          description: "Persist slice execution state",
+          order: 1,
+          checkpoint: "state file is written",
+          tasks: [
+            { id: "s1-t1", description: "state", estimated_minutes: 10, context_budget: "low", dependencies: [], model_tier: "low" as const },
+          ],
+        },
+        {
+          name: "model-routing",
+          description: "Resolve model tiers",
+          order: 2,
+          checkpoint: "tier model is recorded",
+          tasks: [
+            { id: "s2-t1", description: "routing", estimated_minutes: 20, context_budget: "medium", dependencies: ["s1-t1"], model_tier: "powerful" as const },
+          ],
+        },
+      ],
+    };
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "idle" as const,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "ready" as const,
+      approvals: [],
+      gate_reviews: [],
+      stage_attempts: {},
+      history: [],
+      updatedAt: now,
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+    await writeArtifact(config, {
+      stage: "W",
+      title: "W",
+      content: JSON.stringify(workTree),
+      generatedAt: now,
+      artifactPath: "",
+    });
+    await writeWorkTree(config, workTree);
+
+    const runner = new TestRunner((_input, call) => `
+# Implementation Report
+
+**Status:** DONE
+
+## Slice ${call}: completed
+### Implementation Content
+- Implemented slice ${call}
+
+### Verification Result
+- Verified slice ${call}
+
+## Files Changed
+- packages/qrspi/src/engine/engine.ts
+
+## Self-Review
+- Completeness: slice ${call} completed
+`);
+
+    const result = await runSingleStage(config, wf, eng, runner, undefined, "en");
+    const sliceState = await readSliceExecutionState(config);
+    const runDirs = readdirSync(join(config.projectRoot, ".qrspi", config.featureId, "runs")).sort();
+
+    expect(result.validation.valid).toBe(true);
+    expect(result.artifact?.stage).toBe("I");
+    expect(result.engineState.history.at(-1)?.stage).toBe("I");
+    expect(result.engineState.history.at(-1)?.success).toBe(true);
+    expect(runner.calls).toBe(2);
+    expect(runner.inputs.map((input) => input.options.model)).toHaveLength(2);
+    expect(sliceState?.slices.map((slice) => slice.status)).toEqual(["completed", "completed"]);
+    expect(sliceState?.slices.map((slice) => slice.model_tier)).toEqual(["low", "powerful"]);
+    expect(runDirs.some((dir) => dir.startsWith("I_slice1_core-state_"))).toBe(true);
+    expect(runDirs.some((dir) => dir.startsWith("I_slice2_model-routing_"))).toBe(true);
+  });
+
+  it("preserves completed slice outputs when resuming I stage slice execution", async () => {
+    await initWorkflow(config);
+    const now = new Date().toISOString();
+    const workTree = {
+      slices: [
+        {
+          name: "already-done",
+          description: "Completed in a previous run",
+          order: 1,
+          checkpoint: "previous output is preserved",
+          tasks: [
+            { id: "s1-t1", description: "state", estimated_minutes: 10, context_budget: "low", dependencies: [], model_tier: "low" as const },
+          ],
+        },
+        {
+          name: "remaining",
+          description: "Runs after resume",
+          order: 2,
+          checkpoint: "new output is added",
+          tasks: [
+            { id: "s2-t1", description: "resume", estimated_minutes: 10, context_budget: "low", dependencies: ["s1-t1"], model_tier: "standard" as const },
+          ],
+        },
+      ],
+    };
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "idle" as const,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "ready" as const,
+      approvals: [],
+      gate_reviews: [],
+      stage_attempts: {},
+      history: [],
+      updatedAt: now,
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+    await writeArtifact(config, {
+      stage: "W",
+      title: "W",
+      content: JSON.stringify(workTree),
+      generatedAt: now,
+      artifactPath: "",
+    });
+    await writeWorkTree(config, workTree);
+    const previousRunDir = await createRunDir(config, "I_slice1_already-done_20260429_120000_attempt1");
+    await writeRunFile(previousRunDir, "runner_stdout.txt", `
+# Implementation Report
+
+**Status:** DONE
+
+## Implementation Content
+- Previous completed output
+
+## Verification Result
+- Previous verification
+
+## Files Changed
+- previous.ts
+
+## Self-Review
+- Completeness: previous slice completed
+`);
+    await writeSliceExecutionState(config, {
+      featureId: config.featureId,
+      current_slice_order: 1,
+      slices: [
+        {
+          slice_name: "already-done",
+          slice_order: 1,
+          status: "completed",
+          attempts: 1,
+          model_tier: "low",
+          runner: "mock",
+          model: "gpt-5.4",
+          run_dir: previousRunDir,
+          started_at: now,
+          finished_at: now,
+          reported_status: "DONE",
+          validation: {
+            stage: "I",
+            valid: true,
+            issues: [],
+            summary: "Implementation report is complete",
+          },
+        },
+        {
+          slice_name: "remaining",
+          slice_order: 2,
+          status: "pending",
+          attempts: 0,
+          model_tier: "standard",
+        },
+      ],
+      updatedAt: now,
+    });
+
+    const runner = new TestRunner(`
+# Implementation Report
+
+**Status:** DONE
+
+## Implementation Content
+- New completed output
+
+## Verification Result
+- New verification
+
+## Files Changed
+- new.ts
+
+## Self-Review
+- Completeness: remaining slice completed
+`);
+
+    const result = await runSingleStage(config, wf, eng, runner, undefined, "en");
+    const aggregateContent = readFileSync(result.artifact!.artifactPath, "utf-8");
+
+    expect(result.validation.valid).toBe(true);
+    expect(runner.calls).toBe(1);
+    expect(aggregateContent).toContain("Previous completed output");
+    expect(aggregateContent).toContain("New completed output");
+  });
+
+  it("resumeSliceExecution reruns from a reset pending slice and skips completed slices", async () => {
+    await initWorkflow(config);
+    const now = new Date().toISOString();
+    const workTree = {
+      slices: [
+        {
+          name: "already-done",
+          description: "Completed in a previous run",
+          order: 1,
+          checkpoint: "already done",
+          tasks: [
+            { id: "s1-t1", description: "done", estimated_minutes: 10, context_budget: "low", dependencies: [], model_tier: "low" as const },
+          ],
+        },
+        {
+          name: "retry-target",
+          description: "Reset slice",
+          order: 2,
+          checkpoint: "retry completes",
+          tasks: [
+            { id: "s2-t1", description: "retry", estimated_minutes: 10, context_budget: "low", dependencies: [], model_tier: "standard" as const },
+          ],
+        },
+      ],
+    };
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "idle" as const,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "failed" as const,
+      approvals: [],
+      gate_reviews: [],
+      stage_attempts: { I: 1 },
+      history: [],
+      lastError: "previous slice failed",
+      updatedAt: now,
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+    await writeArtifact(config, {
+      stage: "W",
+      title: "W",
+      content: JSON.stringify(workTree),
+      generatedAt: now,
+      artifactPath: "",
+    });
+    await writeWorkTree(config, workTree);
+    const previousRunDir = await createRunDir(config, "I_slice1_already-done_20260429_120000_attempt1");
+    await writeRunFile(previousRunDir, "runner_stdout.txt", `
+# Implementation Report
+
+**Status:** DONE
+
+## Implementation Content
+- Previous completed output
+
+## Verification Result
+- Previous verification
+
+## Files Changed
+- previous.ts
+
+## Self-Review
+- Completeness: previous slice completed
+`);
+    await writeSliceExecutionState(config, {
+      featureId: config.featureId,
+      current_slice_order: 2,
+      slices: [
+        {
+          slice_name: "already-done",
+          slice_order: 1,
+          status: "completed",
+          attempts: 1,
+          model_tier: "low",
+          runner: "mock",
+          model: "gpt-5.4",
+          run_dir: previousRunDir,
+          started_at: now,
+          finished_at: now,
+          reported_status: "DONE",
+        },
+        {
+          slice_name: "retry-target",
+          slice_order: 2,
+          status: "pending",
+          attempts: 1,
+          model_tier: "standard",
+        },
+      ],
+      updatedAt: now,
+    });
+
+    const runner = new TestRunner(`
+# Implementation Report
+
+**Status:** DONE
+
+## Implementation Content
+- Retried slice output
+
+## Verification Result
+- Retry verification
+
+## Files Changed
+- retry.ts
+
+## Self-Review
+- Completeness: retry target completed
+`);
+
+    const result = await resumeSliceExecution(config, runner, 2, {});
+    const sliceState = await readSliceExecutionState(config);
+
+    expect(result.results.at(-1)?.validation.valid).toBe(true);
+    expect(runner.calls).toBe(1);
+    expect(sliceState?.slices.map((slice) => slice.status)).toEqual(["completed", "completed"]);
+    expect(sliceState?.slices[1]?.attempts).toBe(2);
+  });
+
+  it("uses tier model resolution for slice runner calls unless CLI model overrides it", async () => {
+    await initWorkflow(config);
+    const now = new Date().toISOString();
+    const workTree = {
+      slices: [
+        {
+          name: "powerful-slice",
+          description: "Needs the powerful tier",
+          order: 1,
+          checkpoint: "model is routed",
+          tasks: [
+            { id: "t1", description: "broad change", estimated_minutes: 30, context_budget: "high", dependencies: [], model_tier: "powerful" as const },
+          ],
+        },
+      ],
+    };
+    const wf = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "idle" as const,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const eng = {
+      featureId: config.featureId,
+      currentStage: "I" as const,
+      status: "ready" as const,
+      approvals: [],
+      gate_reviews: [],
+      stage_attempts: {},
+      history: [],
+      updatedAt: now,
+    };
+    await writeWorkflowState(config, wf);
+    await writeEngineState(config, eng);
+    await writeArtifact(config, {
+      stage: "W",
+      title: "W",
+      content: JSON.stringify(workTree),
+      generatedAt: now,
+      artifactPath: "",
+    });
+    await writeWorkTree(config, workTree);
+
+    const previous = process.env.QRSPI_MOCK_MODEL_POWERFUL;
+    process.env.QRSPI_MOCK_MODEL_POWERFUL = "mock-powerful";
+    const reportOutput = `
+# Implementation Report
+
+**Status:** DONE
+
+## Implementation Content
+- Implemented routed slice
+
+## Verification Result
+- Verified routed slice
+
+## Files Changed
+- packages/qrspi/src/runner/model-resolver.ts
+
+## Self-Review
+- Completeness: routed model checked
+`;
+    const runner = new TestRunner(reportOutput);
+
+    try {
+      const envResult = await runSingleStage(config, wf, eng, runner, undefined, "en");
+      const envState = await readSliceExecutionState(config);
+      expect(envResult.validation.valid).toBe(true);
+      expect(runner.inputs[0]?.options.model).toBe("mock-powerful");
+      expect(envState?.slices[0]?.model_resolution?.source).toBe("runner_tier_env");
+
+      const rerunWf = { ...wf, updatedAt: new Date().toISOString() };
+      const rerunEng = { ...eng, stage_attempts: {}, history: [] };
+      await writeWorkflowState(config, rerunWf);
+      await writeEngineState(config, rerunEng);
+      await writeWorkTree(config, { ...workTree, slices: [{ ...workTree.slices[0]!, name: "powerful-slice-cli", order: 2 }] });
+      const cliRunner = new TestRunner(reportOutput);
+      await runSingleStage(config, rerunWf, rerunEng, cliRunner, undefined, "en", { model: "cli-model" });
+      expect(cliRunner.inputs[0]?.options.model).toBe("cli-model");
+    } finally {
+      if (previous === undefined) delete process.env.QRSPI_MOCK_MODEL_POWERFUL;
+      else process.env.QRSPI_MOCK_MODEL_POWERFUL = previous;
+    }
+  });
+
   it("runSingleStage rejects PR when I stage has not completed successfully", async () => {
     await initWorkflow(config);
 
@@ -244,7 +690,7 @@ describe("engine", () => {
     };
     await writeWorkflowState(config, wf);
     await writeEngineState(config, eng);
-    await writeArtifact(config, { stage: "S", title: "S", content: "S".repeat(9000), generatedAt: now, artifactPath: "" });
+    await writeArtifact(config, { stage: "S", title: "S", content: "S".repeat(25000), generatedAt: now, artifactPath: "" });
 
     const runner = new TestRunner(Array.from({ length: 15 }, (_, i) => `plan line ${i}`).join("\n"));
     const result = await runSingleStage(config, wf, eng, runner);
@@ -283,7 +729,7 @@ describe("engine", () => {
     };
     await writeWorkflowState(config, wf);
     await writeEngineState(config, eng);
-    await writeArtifact(config, { stage: "S", title: "S", content: "S".repeat(13000), generatedAt: now, artifactPath: "" });
+    await writeArtifact(config, { stage: "S", title: "S", content: "S".repeat(35000), generatedAt: now, artifactPath: "" });
 
     const runner = new TestRunner(Array.from({ length: 15 }, (_, i) => `plan line ${i}`).join("\n"));
     const result = await runSingleStage(config, wf, eng, runner);

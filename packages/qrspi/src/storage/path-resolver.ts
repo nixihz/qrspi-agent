@@ -37,6 +37,25 @@ export function buildRunDirName(stage: StageCode, attempt: number): string {
   return `${stage}_${ts}_attempt${attempt}`;
 }
 
+export function buildSliceRunDirName(
+  sliceOrder: number,
+  sliceName: string,
+  attempt: number,
+): string {
+  const now = new Date();
+  const ts = now
+    .toISOString()
+    .replace(/[-:T]/g, "")
+    .slice(0, 15)
+    .replace(/(\d{8})(\d{6}).*/, "$1_$2");
+  const slug = sliceName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40) || `slice-${sliceOrder}`;
+  return `I_slice${sliceOrder}_${slug}_${ts}_attempt${attempt}`;
+}
+
 export function buildGateReviewFilename(
   stage: StageCode,
   decision: "approved" | "rejected",

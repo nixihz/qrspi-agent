@@ -220,8 +220,22 @@ qrspi run --root . --feature <feature_id> --input-file requirements.md
 If the user wants to specify a runner:
 
 ```bash
-qrspi run --root . --runner codex --model gpt-5.4
+qrspi run --root . --runner codex --model gpt-5.5
 qrspi run --root . --runner mock
+```
+
+For I-stage slice execution, QRSPI runs each WorkTree slice in a separate
+runner invocation when `.qrspi/<feature>/slices/work_tree.json` exists. Slice
+status is persisted in `.qrspi/<feature>/slices/slice_state.json`, and each
+slice gets its own run directory under `.qrspi/<feature>/runs/`.
+
+`model_tier` values in slice tasks route runner model selection unless the user
+passes `--model`, which remains the highest-priority override. Tier-specific
+environment overrides use:
+
+```bash
+QRSPI_<RUNNER>_MODEL_<TIER>
+QRSPI_MODEL_<TIER>
 ```
 
 Additional rules:
@@ -298,6 +312,8 @@ The CLI uses:
 - `.qrspi/<feature>/artifacts/`
 - `.qrspi/<feature>/structured/`
 - `.qrspi/<feature>/slices/`
+  - `work_tree.json`
+  - `slice_state.json` after I-stage slice execution
 - `.qrspi/<feature>/runs/`
 
 Base decisions on these real directories, not assumptions.

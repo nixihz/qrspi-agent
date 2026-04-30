@@ -208,28 +208,23 @@ function main(argv?: string[]): Promise<number>;
 
   I: `# Implementation Report
 
-## Completion Status
-All 4 vertical slices have been implemented.
+**Status:** DONE
 
-## Slice 1: Runner Protocol Adaptation
-- MockRunner implemented, fixed input produces stable output
-- Model resolution priority: CLI > QRSPI_<RUNNER>_MODEL > QRSPI_MODEL > default
-- BaseRunner interface defined
+## Implementation Content
+- MockRunner implemented deterministic implementation output.
+- CLI, storage, and engine integration paths are represented in this mock report.
 
-## Slice 2: CLI Command Surface
-- Commander.js scaffolded, 11 command handlers
-- Parameters compatible with Python version
-- English output
+## Verification Result
+- Mock implementation validation passed.
 
-## Slice 3: File State Repository
-- Disk protocol compatible with Python version
-- state.json, engine_state.json read/write
-- artifacts, runs, slices directory management
+## Files Changed
+- packages/qrspi/src/runner/mock-runner.ts
 
-## Slice 4: State Machine and Engine
-- 8-stage StageDefinition
-- Gate strategy (D/S/PR)
-- Complete WorkflowEngine closed loop`,
+## Self-Review
+- Completeness: mock implementation report includes the required sections.
+- Quality: output is deterministic for repeatable tests.
+- Discipline: no external command execution is needed for mock runs.
+- Testing: validator-compatible report format is covered by CLI and engine tests.`,
 
   PR: `# Pull Request Review
 
